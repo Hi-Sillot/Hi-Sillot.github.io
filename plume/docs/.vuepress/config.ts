@@ -73,7 +73,7 @@ export default defineUserConfig({
     revealJsPlugin({
       // 插件选项
     }),
-    // 分词仅开发环境生效
+    // 分词构建后也生效，docs:preview 未生效可能是缓存问题
     slimsearchPlugin({
       indexContent: true,
       suggestion: true,

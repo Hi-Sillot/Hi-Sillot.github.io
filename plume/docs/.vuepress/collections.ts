@@ -61,16 +61,7 @@ const demoDoc = defineCollection({
   sidebar: 'auto',
 })
 
-/**
- * 从 astro 迁移来的汐洛文档，待整理
- */
-const doc_origin = defineCollection({
-  type: 'doc',
-  dir: 'col_doc/origin',
-  linkPrefix: '/origin',
-  title: '原汐洛文档',
-  sidebar: 'auto',
-})
+
 const doc_developNotes = defineCollection({
   type: 'doc',
   dir: 'col_doc/1_developNotes',
@@ -109,7 +100,6 @@ const doc_stats = defineCollection({
 export default defineCollection([
   blog,
   demoDoc,
-  doc_origin,
   doc_developNotes,
   doc_releaseNotes,
   doc_sillotGuides,
