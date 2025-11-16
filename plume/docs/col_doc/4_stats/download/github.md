@@ -1,9 +1,8 @@
 ---
-title: GitHub 下载量统计
+title: Sillot GitHub 下载量统计
 createTime: 2025/11/09 16:12:30
-permalink: /origin/35lpur95/
+permalink: /stats/1iqxfrcg/
 ---
-
 ## v0
 
 ### v0.31 -> v0.35
@@ -11,6 +10,7 @@ permalink: /origin/35lpur95/
 <p>
 
 <!-- 0.34 -->
+
 <a href="https://github.com/Hi-Windom/Sillot/releases/tag/v0.34.1700-sillot">
 <img src="https://img.shields.io/github/downloads/Hi-Windom/Sillot/v0.34.1700-sillot/total?logo=github"/></a>
 <!-- 0.33 -->
@@ -25,12 +25,12 @@ permalink: /origin/35lpur95/
 
 </p>
 
-
 ### v0.20 -> v0.30
 
 <p>
 
 <!-- 0.30 -->
+
 <a href="https://github.com/Hi-Windom/Sillot/releases/tag/v0.30.1600-sillot">
 <img src="https://img.shields.io/github/downloads/Hi-Windom/Sillot/v0.30.1600-sillot/total?logo=github"/></a>
 <!-- 0.29 -->
@@ -71,6 +71,7 @@ permalink: /origin/35lpur95/
 <p>
 
 <!-- 0.19 -->
+
 <a href="https://github.com/Hi-Windom/Sillot/releases/tag/v0.19.3-sillot">
 <img src="https://img.shields.io/github/downloads/Hi-Windom/Sillot/v0.19.3-sillot/total?logo=github"/></a>
 <!-- 0.18 -->
