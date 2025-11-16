@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@css-render/vue3-ssr": "^0.15.14",
+    "@node-rs/jieba": "^2.0.1",
     "@vicons/ionicons4": "^0.13.0",
     "@vicons/ionicons5": "^0.13.0",
     "@vuepress/bundler-vite": "2.0.0-rc.26",
@@ -22,6 +23,7 @@
     "@vuepress/plugin-links-check": "2.0.0-rc.118",
     "@vuepress/plugin-llms": "2.0.0-rc.118",
     "@vuepress/plugin-revealjs": "2.0.0-rc.118",
+    "@vuepress/plugin-slimsearch": "2.0.0-rc.118",
     "date-fns": "^4.1.0",
     "http-server": "^14.1.1",
     "naive-ui": "^2.43.1",
