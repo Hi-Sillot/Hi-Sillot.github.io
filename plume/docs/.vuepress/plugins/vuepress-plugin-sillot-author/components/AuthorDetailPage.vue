@@ -143,7 +143,7 @@ onMounted(() => {
 .base-content {
   max-width: 900px;
   margin: 0 auto;
-  padding: 2rem 1.5rem;
+  padding: var(--vp-nav-height) 1.5rem;
 }
 
 /* 返回按钮样式 */

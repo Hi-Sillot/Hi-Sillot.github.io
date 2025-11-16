@@ -52,5 +52,6 @@ import VPFooter from '@theme/VPFooter.vue'
 <style>
 .base-content {
   padding-top: var(--vp-nav-height);
+  margin-top: 0.3rem !important;
 }
 </style>
