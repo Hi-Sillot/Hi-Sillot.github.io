@@ -6,17 +6,15 @@ config:
     type: hero
     full: true
     effect: lightning
+    effectConfig:
+      hue: 58
+      xOffset: 0.58
+      speed: 3.1
+      intensity: 0.13
+      size: 5.8
     hero:
-      name: Theme Plume
-      tagline: VuePress Next Theme
-      text: 一个简约的，功能丰富的 vuepress 文档&博客 主题
+      name: 🦢
+      tagline: hi~Sillot
+      text: 汐洛无处不在
       actions:
-        -
-          theme: brand
-          text: 博客
-          link: /blog/
-        -
-          theme: alt
-          text: Github →
-          link: https://github.com/pengzhanbo/vuepress-theme-plume
 ---
