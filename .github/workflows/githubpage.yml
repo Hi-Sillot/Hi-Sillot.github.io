@@ -44,6 +44,11 @@ jobs:
         run: pnpm docs:build
         working-directory: plume
 
+      # 添加 CNAME 文件
+      - name: Add CNAME file
+        run: echo "hi.sillot.top" > dist/CNAME
+        working-directory: plume/docs/.vuepress
+
       # 查看 workflow 的文档来获取更多信息
       # @see https://github.com/crazy-max/ghaction-github-pages
       - name: Deploy to GitHub Pages
