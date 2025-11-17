@@ -1,10 +1,8 @@
 ---
-title: veddio
+title: tabs
 createTime: 2025/11/15 20:27:28
 permalink: /demo/yr9nbgg6/
 ---
-
-
 测试 sillot-video-tabs:
 
 <!-- sillot-video-tabs 

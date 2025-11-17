@@ -2,21 +2,13 @@ import { defineClientConfig } from "vuepress/client";
 import { setup } from "@css-render/vue3-ssr";
 import { NaiveUI } from "./modules/NaiveUi";
 
+import { registerGlobalComponents } from "./client.components";
+
 // 布局
 import Layout from "./layouts/Layout.vue";
 import AuthorDetail from "./plugins/vuepress-plugin-sillot-author/components/AuthorDetailPage.vue";
 import AuthorList from "./plugins/vuepress-plugin-sillot-author/components/AuthorListPage.vue";
-// 组件
-import BannerTopArchived from "./components/BannerTopArchived.vue";
-import BannerTopPrLock from "./components/BannerTopPrLock.vue";
-import BannerTopPrNeed from "./components/BannerTopPrNeed.vue";
-import VSCodeSettingsLink from "./plugins/vuepress-plugin-sillot-inline/components/VSCodeSettingsLink.vue";
-import GithubLabel from "./plugins/vuepress-plugin-sillot-inline/components/GithubLabel.vue";
-import C from "./plugins/vuepress-plugin-sillot-inline/components/Const.vue";
-import TestNaiveUi from "./components/TestNaiveUi.vue";
-import TestRelationGraph from "./plugins/vuepress-plugin-sillot-vivime/components/TestRelationGraph.vue";
-// 模板组件，一般不在 md 中使用，这里使用只是前期开发调试
-import SSRComponent from "./components/templates/SSRComponent.vue";
+
 
 import { createPinia } from "pinia";
 import piniaPluginPersistedstate from "pinia-plugin-persistedstate";
@@ -61,15 +53,7 @@ export default defineClientConfig({
     app.use(NaiveUI); // https://www.naiveui.com/zh-CN/dark/docs/import-on-demand
 
     // 注册全局组件，不在 md 中使用则不需注册
-    app.component("BannerTopArchived", BannerTopArchived);
-    app.component("BannerTopPrLock", BannerTopPrLock);
-    app.component("BannerTopPrNeed", BannerTopPrNeed);
-    app.component("VSCodeSettingsLink", VSCodeSettingsLink);
-    app.component("GithubLabel", GithubLabel);
-    app.component("C", C);
-    app.component("TestNaiveUi", TestNaiveUi);
-    app.component("TestRelationGraph", TestRelationGraph);
-    app.component("SSRComponent", SSRComponent);
+    registerGlobalComponents(app);
 
     // 初始化存储
     const authorStore = useAuthorStore();

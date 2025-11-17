@@ -17,7 +17,7 @@ import { revealJsPlugin } from "@vuepress/plugin-revealjs"; // 在你的 VuePres
 import { slimsearchPlugin } from "@vuepress/plugin-slimsearch";
 import BiGraph from "./plugins/BiGraph/client/index";
 import AuthorPlugin from "./plugins/vuepress-plugin-sillot-author";
-import SillotTabsPlugin from "./plugins/vuepress-plugin-sillot-tabs";
+import SillotBlockPlugin from "./plugins/vuepress-plugin-sillot-block";
 import { Jieba } from "@node-rs/jieba";
 import { dict } from "@node-rs/jieba/dict.js";
 
@@ -60,7 +60,7 @@ export default defineUserConfig({
       // 配置项
     }),
     // 注册Sillot标签插件（传入自定义配置）
-    SillotTabsPlugin({
+    SillotBlockPlugin({
       videoTabs: {},
     }),
     AuthorPlugin(),
