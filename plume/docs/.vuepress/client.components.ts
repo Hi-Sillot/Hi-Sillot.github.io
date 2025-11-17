@@ -14,6 +14,7 @@ import IndexMe from './plugins/vuepress-plugin-sillot-block/banner/components/In
 import DirectoryLevel from './plugins/vuepress-plugin-sillot-block/banner/components/DirectoryLevel.vue';
 // 模板组件，一般不在 md 中使用，这里使用只是前期开发调试
 import SSRComponent from "./components/templates/SSRComponent.vue";
+import WebsiteCard from './plugins/vuepress-plugin-sillot-block/card/WebsiteCard.vue';
 
 export const components = {
   BannerTopArchived,
@@ -27,6 +28,7 @@ export const components = {
   SSRComponent,
   IndexMe,
   DirectoryLevel,
+  WebsiteCard,
 } as const
 
 export function registerGlobalComponents(app: App) {
