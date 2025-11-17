@@ -10,6 +10,8 @@ import GithubLabel from "./plugins/vuepress-plugin-sillot-inline/components/Gith
 import C from "./plugins/vuepress-plugin-sillot-inline/components/Const.vue";
 import TestNaiveUi from "./components/TestNaiveUi.vue";
 import TestRelationGraph from "./plugins/vuepress-plugin-sillot-vivime/components/TestRelationGraph.vue";
+import IndexMe from './plugins/vuepress-plugin-sillot-block/banner/components/IndexMe.vue';
+import DirectoryLevel from './plugins/vuepress-plugin-sillot-block/banner/components/DirectoryLevel.vue';
 // 模板组件，一般不在 md 中使用，这里使用只是前期开发调试
 import SSRComponent from "./components/templates/SSRComponent.vue";
 
@@ -23,6 +25,8 @@ export const components = {
   TestNaiveUi,
   TestRelationGraph,
   SSRComponent,
+  IndexMe,
+  DirectoryLevel,
 } as const
 
 export function registerGlobalComponents(app: App) {
