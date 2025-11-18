@@ -1,7 +1,6 @@
 <!-- TestNaiveUi.vue -->
 
 <template>
-  <n-config-provider :theme="darkTheme">
     <n-message-provider>
       <TestNAvatar />
 
@@ -62,12 +61,10 @@
       <TestNSplit />
 
     </n-message-provider>
-  </n-config-provider>
 </template>
 
 
 <script setup lang="ts">
-import { darkTheme } from 'naive-ui'
 import TestNTag from './test_navie/TestNTag.vue';
 import TestNPageHeader from './test_navie/TestNPageHeader.vue';
 import TestNWatermark from './test_navie/TestNWatermark.vue';

@@ -13,9 +13,5 @@ import TestDivider from './test_tdesign/TestDivider.vue';
 import TestDropdown from './test_tdesign/TestDropdown.vue';
 import TestDrawer from './test_tdesign/TestDrawer.vue';
 import TestSwitch from './test_tdesign/TestSwitch.vue';
-// 设置深色模式
-document.documentElement.setAttribute("theme-mode", "dark");
-// 重置为浅色模式
-// document.documentElement.removeAttribute("theme-mode");
 
 </script>

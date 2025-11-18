@@ -1,3 +1,4 @@
+<!-- 带顶栏的基础布局，包含导航栏、内容、底部等元素。提供自定义页面使用 -->
 <script lang="ts" setup>
 import VPNav from '@theme/Nav/VPNav.vue'
 import VPBackToTop from '@theme/VPBackToTop.vue'

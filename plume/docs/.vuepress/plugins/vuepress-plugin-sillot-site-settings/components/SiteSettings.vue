@@ -1,6 +1,6 @@
 <template>
   <div>
-    <t-drawer v-model:visible="visible" attach="body" :mode="mode" :placement="placement" header="页面设置" :footer="null"
+    <t-drawer v-model:visible="visible" attach="body" :mode="mode" :placement="placement" header="站点设置" :footer="null"
       destroy-on-close>
       <t-list>
         <t-list-item>
@@ -11,14 +11,17 @@
         </t-list-item>
       </t-list>
     </t-drawer>
-    <t-button variant="outline" @click="visible = true">页面设置</t-button>
+    <t-button style="margin-left: 18px;" shape="circle" variant="text" @click="visible = true">
+      <menu-application-icon :stroke-width="2" />
+    </t-button>
+
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue';
-import { DrawerProps } from 'tdesign-vue-next';
-import { SwitchProps } from 'tdesign-vue-next';
+import { DrawerProps, SwitchProps } from 'tdesign-vue-next';
+import { MenuApplicationIcon } from 'tdesign-icons-vue-next';
 
 const visible = ref(false);
 const mode = ref<DrawerProps['mode']>('push');
@@ -57,6 +60,7 @@ onUnmounted(() => {
   document.body.classList.remove('compact-layout');
 });
 </script>
+
 
 <style>
 /* 全局样式 */

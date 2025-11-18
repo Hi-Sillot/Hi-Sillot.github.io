@@ -2,10 +2,6 @@ import type { Router } from "vuepress/client";
 import type { App } from "vue";
 import { createPinia } from "pinia";
 import piniaPluginPersistedstate from "pinia-plugin-persistedstate";
-import { setup } from "@css-render/vue3-ssr";
-
-// NaiveUI
-import { NaiveUI } from "./modules/NaiveUi";
 
 // 作者插件
 import { useAuthorStore } from "./plugins/vuepress-plugin-sillot-author/stores/author";

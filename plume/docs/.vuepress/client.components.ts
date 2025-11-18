@@ -7,10 +7,10 @@ import { setup } from "@css-render/vue3-ssr";
 import { NaiveUI } from "./modules/NaiveUi";
 import TestNaiveUi from "./components/TestNaiveUi.vue";
 // TDesign
-import TDesign from 'tdesign-vue-next';
+import TDesign from "tdesign-vue-next";
 import TestTDesign from "./components/TestTDesign.vue";
 // 引入组件库的少量全局样式变量
-import 'tdesign-vue-next/es/style/index.css';
+import "tdesign-vue-next/es/style/index.css";
 
 // 组件
 import BannerTopArchived from "./plugins/vuepress-plugin-sillot-block/banner/components/BannerTopArchived.vue";
@@ -76,6 +76,13 @@ function setupNaiveUI(app: App, isSSR: boolean) {
 }
 
 /**
+ * 初始化 TDesign
+ */
+function setupTDesign(app: App, isSSR: boolean) {
+  app.use(TDesign);
+}
+
+/**
  * 初始化所有组件库
  */
 export async function setupUI(context: EnhanceContext) {
@@ -86,7 +93,8 @@ export async function setupUI(context: EnhanceContext) {
   // 初始化 NaiveUI
   setupNaiveUI(app, isSSR);
   // 初始化 TDesign
-  app.use(TDesign);
+  setupTDesign(app, isSSR);
+  // app.use(TDesign);
 
   // 注册全局组件，不在 md 中使用则不需注册
   registerGlobalComponents(context.app);

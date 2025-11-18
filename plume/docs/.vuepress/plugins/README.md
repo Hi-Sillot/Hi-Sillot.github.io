@@ -20,6 +20,10 @@
 
 行内组件
 
-## vuepress-plugin-sillot-doc-settings
+## vuepress-plugin-sillot-site-settings
 
-提供一个菜单调整文档的布局等设置
+提供一个菜单调整站点的布局等设置
+
+## vuepress-plugin-sillot-site-design
+
+提供站点footer等设计
