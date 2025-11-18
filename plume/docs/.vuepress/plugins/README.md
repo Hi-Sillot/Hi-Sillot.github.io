@@ -19,3 +19,7 @@
 ## vuepress-plugin-sillot-inline
 
 行内组件
+
+## vuepress-plugin-sillot-doc-settings
+
+提供一个菜单调整文档的布局等设置

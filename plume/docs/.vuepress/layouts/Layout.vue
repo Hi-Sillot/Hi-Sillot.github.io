@@ -5,6 +5,7 @@ import Backlink from "../plugins/BiGraph/client/components/Backlink.vue";
 import LocalGraph from "../plugins/BiGraph/client/components/LocalGraphView.vue";
 import GlobalGraph from "../plugins/BiGraph/client/components/GlobalGraphView.vue";
 import AuthorLink from "../plugins/vuepress-plugin-sillot-author/components/AuthorLink.vue";
+import DocSettings from "../plugins/vuepress-plugin-sillot-doc-settings/components/DocSettings.vue";
 
 
 declare const __RELATIONAL_GRAPH_ENABLE_LOCAL_GRAPH: boolean;
@@ -22,6 +23,9 @@ const options = computed(() => {
   <Layout>
     <template #doc-footer-before>
       <backlink></backlink>
+    </template>
+     <template #aside-top>
+      <DocSettings/>
     </template>
     <template #aside-outline-before>
       <local-graph v-if="options.enableLocalGraph"></local-graph>

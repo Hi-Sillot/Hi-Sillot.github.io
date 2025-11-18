@@ -15,5 +15,3 @@ permalink: /demo/
 <!-- 不显示标题 -->
 <!-- <IndexMe :show-title="false" /> -->
 
-
-<TestNaiveUi />

@@ -1,6 +1,6 @@
 import { defineClientConfig } from "vuepress/client";
 
-import { registerGlobalComponents } from "./client.components";
+import { setupUI } from "./client.components";
 import { setupPlugins } from "./client.plugins";
 
 // 布局
@@ -9,7 +9,6 @@ import AuthorDetail from "./plugins/vuepress-plugin-sillot-author/components/Aut
 import AuthorList from "./plugins/vuepress-plugin-sillot-author/components/AuthorListPage.vue";
 // 样式
 import "./styles/index.css";
-
 
 /**
  * vuepress 的 SSR 兼容参考 https://vitepress.dev/zh/guide/ssr-compat
@@ -24,13 +23,10 @@ export default defineClientConfig({
     AuthorDetail,
   },
   async enhance({ app, router }) {
-
-    // 注册全局组件，不在 md 中使用则不需注册
-    registerGlobalComponents(app);
-
+    await setupUI({ app, router });
     await setupPlugins({ app, router });
 
-     // 路由注册（因为涉及布局组件，保留在主配置中更清晰）
+    // 路由注册（因为涉及布局组件，保留在主配置中更清晰）
     router.addRoute({
       path: "/authors.html",
       component: AuthorList,
@@ -44,6 +40,5 @@ export default defineClientConfig({
     });
 
     console.log("作者详情页路由已注册");
-
   },
 });

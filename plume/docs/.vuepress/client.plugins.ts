@@ -1,5 +1,5 @@
-import type { Router } from 'vuepress/client'
-import type { App } from 'vue'
+import type { Router } from "vuepress/client";
+import type { App } from "vue";
 import { createPinia } from "pinia";
 import piniaPluginPersistedstate from "pinia-plugin-persistedstate";
 import { setup } from "@css-render/vue3-ssr";
@@ -35,26 +35,12 @@ export function setupPinia(app: App, isSSR: boolean) {
 }
 
 /**
- * 初始化 NaiveUI
- * ref https://www.naiveui.com/zh-CN/dark/docs/vitepress
- */
-export function setupNaiveUI(app: App, isSSR: boolean) {
-  if (isSSR) {
-    const { collect } = setup(app);
-    app.provide("css-render-collect", collect);
-  }
-  
-  app.use(NaiveUI); // https://www.naiveui.com/zh-CN/dark/docs/import-on-demand
-}
-
-/**
  * 初始化作者插件
  */
 export async function setupAuthorPlugin(app: App, router: Router) {
-
   // 初始化存储
   const authorStore = useAuthorStore();
-  
+
   try {
     // @ts-ignore
     const authorData = await import("@temp/author-data.ts");
@@ -66,11 +52,14 @@ export async function setupAuthorPlugin(app: App, router: Router) {
 
   // 路由守卫处理
   router.beforeEach((to) => {
-    if (to.path.startsWith("/authors.html") || (to.path.startsWith("/authors/") && !to.path.endsWith("/"))) {
+    if (
+      to.path.startsWith("/authors.html") ||
+      (to.path.startsWith("/authors/") && !to.path.endsWith("/"))
+    ) {
       // 自动添加尾部斜杠，确保与创建的页面路径一致 authors/a.thml -> authors/a/
       const normalizedPath = to.path.endsWith("/") ? to.path : to.path + "/";
       if (normalizedPath !== to.path) {
-        return normalizedPath.replace('.html', '');
+        return normalizedPath.replace(".html", "");
       }
     }
   });
@@ -82,7 +71,7 @@ export async function setupAuthorPlugin(app: App, router: Router) {
  */
 export async function setupBiGraphPlugin() {
   const bioStore = useBioChainStore();
-  
+
   try {
     // @ts-ignore
     const bioData = await import(`./.temp/${TEMP_FILE_NAMES.BIO_TS}.js`);
@@ -90,7 +79,7 @@ export async function setupBiGraphPlugin() {
       页面数: bioData.pageCount,
       有效页面数: bioData.validPageCount,
     }, bioData.default);
-    
+
     bioStore.BiGraph = bioData.default;
     BioChainService.build(bioStore.BiGraph!.getAllPages());
   } catch (error) {
@@ -108,9 +97,6 @@ export async function setupPlugins(context: EnhanceContext) {
 
   // 1. 初始化 Pinia
   setupPinia(app, isSSR);
-
-  // 2. 初始化 NaiveUI
-  setupNaiveUI(app, isSSR);
 
   // 3. 初始化作者插件
   await setupAuthorPlugin(app, router);
