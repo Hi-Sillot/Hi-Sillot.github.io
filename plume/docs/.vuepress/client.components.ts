@@ -19,7 +19,7 @@ import BannerTopPrNeed from "./plugins/vuepress-plugin-sillot-block/banner/compo
 import BannerTopUpdateNeed from "./plugins/vuepress-plugin-sillot-block/banner/components/BannerTopUpdateNeed.vue";
 import VSCodeSettingsLink from "./plugins/vuepress-plugin-sillot-inline/components/VSCodeSettingsLink.vue";
 import GithubLabel from "./plugins/vuepress-plugin-sillot-inline/components/GithubLabel.vue";
-import C from "./plugins/vuepress-plugin-sillot-inline/components/Const.vue";
+import C from "./plugins/vuepress-plugin-sillot-inline/components/Cedoss.vue";
 import TestRelationGraph from "./plugins/vuepress-plugin-sillot-vivime/components/TestRelationGraph.vue";
 import IndexMe from "./plugins/vuepress-plugin-sillot-block/banner/components/IndexMe.vue";
 import DirectoryLevel from "./plugins/vuepress-plugin-sillot-block/banner/components/DirectoryLevel.vue";
