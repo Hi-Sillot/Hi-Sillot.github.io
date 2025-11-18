@@ -16,6 +16,7 @@ import "tdesign-vue-next/es/style/index.css";
 import BannerTopArchived from "./plugins/vuepress-plugin-sillot-block/banner/components/BannerTopArchived.vue";
 import BannerTopPrLock from "./plugins/vuepress-plugin-sillot-block/banner/components/BannerTopPrLock.vue";
 import BannerTopPrNeed from "./plugins/vuepress-plugin-sillot-block/banner/components/BannerTopPrNeed.vue";
+import BannerTopUpdateNeed from "./plugins/vuepress-plugin-sillot-block/banner/components/BannerTopUpdateNeed.vue";
 import VSCodeSettingsLink from "./plugins/vuepress-plugin-sillot-inline/components/VSCodeSettingsLink.vue";
 import GithubLabel from "./plugins/vuepress-plugin-sillot-inline/components/GithubLabel.vue";
 import C from "./plugins/vuepress-plugin-sillot-inline/components/Const.vue";
@@ -35,6 +36,7 @@ export const components = {
   BannerTopArchived,
   BannerTopPrLock,
   BannerTopPrNeed,
+  BannerTopUpdateNeed,
   VSCodeSettingsLink,
   GithubLabel,
   C,

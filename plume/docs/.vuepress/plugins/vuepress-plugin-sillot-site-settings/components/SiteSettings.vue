@@ -1,10 +1,12 @@
+<!-- 作用范围取决于挂载位置，当挂载到顶栏插槽他是全局的，挂载在页内插槽则仅影响当前页面 -->
+<!-- TODO: 紧凑布局在移动端应当隐藏，暂时不做处理 -->
 <template>
   <div>
     <t-drawer v-model:visible="visible" attach="body" :mode="mode" :placement="placement" header="站点设置" :footer="null"
       destroy-on-close>
       <t-list>
         <t-list-item>
-          紧凑布局（仅当前页面）
+          紧凑布局
           <template #action>
             <t-switch v-model="checked_1" @change="onChange_1" />
           </template>

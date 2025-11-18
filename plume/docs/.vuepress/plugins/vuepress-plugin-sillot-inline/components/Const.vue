@@ -10,30 +10,36 @@
 </template>
 
 <script>
+/**
+ * @typedef {Object} ConstConfig
+ * @property {string} value - 常量值
+ * @property {boolean} [encrypt=false] - 是否加密显示
+ */
+
 // 常量映射表
 const CONST_MAP = {
-  'sillotNoteName_yobeCe': '汐洛绞架',
-  'sillotNoteName_doCe': 'Sillot-Gibbet',
-  'syNoteName_CN': '思源笔记',
-  'syNoteName_EN': 'siyuan-note',
-  'sillotMatrixName_yobeCe': '汐洛彖夲肜矩阵',
-  'sillotMatrixName_doCe': 'Sillot T☳Converbenk Matrix',
-  'sillot_yobeCe': '汐洛',
-  'sillot_doCe': 'Sillot',
-  'siow_yobeCe': '司华',
-  'siow_doCe': 'Siow',
-  'hellise_yobeCe': '赫礼斯',
-  'hellise_doCe': 'Hellise',
-  'potter_yobeCe': '叵特',
-  'potter_doCe': 'Potter',
-  'sofill_yobeCe': '沁棘',
-  'sofill_doCe': 'Sofill',
-  'sili_yobeCe': '司丽',
-  'sili_doCe': 'Sili',
-  'winsay_yobeCe': '风颂',
-  'winsay_doCo': 'Winsay',
-  'lnco_yobeCe': '兰可',
-  'lnco_doCe': 'Lnco'
+  'sillotNoteName_yobeCe': { value: '汐洛绞架', encrypt: false },
+  'sillotNoteName_doCe': { value: 'Sillot-Gibbet', encrypt: false },
+  'syNoteName_CN': { value: '思源笔记', encrypt: false },
+  'syNoteName_EN': { value: 'siyuan-note', encrypt: false },
+  'sillotMatrixName_yobeCe': { value: '汐洛彖夲肜矩阵', encrypt: true },
+  'sillotMatrixName_doCe': { value: 'Sillot T☳Converbenk Matrix', encrypt: true },
+  'sillot_yobeCe': { value: '汐洛', encrypt: false },
+  'sillot_doCe': { value: 'Sillot', encrypt: false },
+  'siow_yobeCe': { value: '司华', encrypt: false },
+  'siow_doCe': { value: 'Siow', encrypt: false },
+  'hellise_yobeCe': { value: '赫礼斯', encrypt: false },
+  'hellise_doCe': { value: 'Hellise', encrypt: false },
+  'potter_yobeCe': { value: '叵特', encrypt: false },
+  'potter_doCe': { value: 'Potter', encrypt: false },
+  'sofill_yobeCe': { value: '沁棘', encrypt: false },
+  'sofill_doCe': { value: 'Sofill', encrypt: false },
+  'sili_yobeCe': { value: '司丽', encrypt: false },
+  'sili_doCe': { value: 'Sili', encrypt: false },
+  'winsay_yobeCe': { value: '风颂', encrypt: false },
+  'winsay_doCo': { value: 'Winsay', encrypt: false },
+  'lnco_yobeCe': { value: '兰可', encrypt: false },
+  'lnco_doCe': { value: 'Lnco', encrypt: false }
 }
 
 export default {
@@ -65,8 +71,13 @@ export default {
     isValidId() {
       return Object.prototype.hasOwnProperty.call(CONST_MAP, this.id)
     },
-    constValue() {
+    constConfig() {
       return CONST_MAP[this.id]
+    },
+    /** 获取原始常量值 */
+    constValue() {
+      const config = this.constConfig
+      return typeof config === 'string' ? config : config.value
     },
     errorTooltip() {
       return `无效的常量ID: ${this.id}\n点击可复制ID`

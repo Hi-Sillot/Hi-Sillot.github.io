@@ -55,7 +55,8 @@
 .banner-content {
     display: inline-flex !important;
     align-items: center;
-    letter-spacing: .58px;
+    /* letter-spacing: .58px; */
+    letter-spacing: 0.1em;
     text-align-last: justify; /* 窄宽度适配 */
 }
 

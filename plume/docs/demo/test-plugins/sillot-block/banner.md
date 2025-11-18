@@ -11,3 +11,4 @@ permalink: /demo/d69rrqt5/
 
 <BannerTopPrNeed/>
 
+<BannerTopUpdateNeed/>
