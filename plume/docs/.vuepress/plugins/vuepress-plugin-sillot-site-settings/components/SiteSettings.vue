@@ -1,5 +1,4 @@
 <!-- 作用范围取决于挂载位置，当挂载到顶栏插槽他是全局的，挂载在页内插槽则仅影响当前页面 -->
-<!-- TODO: 紧凑布局在移动端应当隐藏，暂时不做处理 -->
 <template>
   <div>
     <t-drawer v-model:visible="visible" attach="body" :mode="mode" :size="'520px'" :placement="placement" header="站点设置"
@@ -140,6 +139,7 @@ import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { DrawerProps, SwitchProps, UploadProps, MessagePlugin, UploadFile } from 'tdesign-vue-next';
 import { MenuApplicationIcon, RefreshIcon, LockOnIcon } from 'tdesign-icons-vue-next';
 import { CedossMap, EncryptedCedossantItem, EncryptedCedoss, useCedossStore } from '../../vuepress-plugin-sillot-inline/stores/useCedoss';
+import { isValidEncryptedCedoss, readFileAsText, simpleXorCrypt } from '../handler/site-settings';
 
 
 // 抽屉相关
@@ -170,18 +170,6 @@ const statusIcon = computed(() => {
     default: return 'help-circle';
   }
 });
-
-// 简单的异或加密函数（与store中保持一致）
-const simpleXorCrypt = (str: string, key: string): string => {
-  if (!key) return str;
-  let result = '';
-  for (let i = 0; i < str.length; i++) {
-    const keyChar = key.charCodeAt(i % key.length);
-    const strChar = str.charCodeAt(i);
-    result += String.fromCharCode(strChar ^ keyChar);
-  }
-  return result;
-};
 
 // 显示状态消息
 const showStatus = (message: string, type: 'success' | 'error' | 'info' = 'info', duration: number = 3000) => {
@@ -280,11 +268,6 @@ const handleEncryptUpload: UploadProps['onChange'] = async (files) => {
   }
 };
 
-// 类型守卫函数，检查是否为加密数据项
-const isEncryptedCedossantItem = (value: any): value is EncryptedCedossantItem => {
-  return value && typeof value === 'object' && 'value' in value;
-};
-
 
 // 处理导入上传 - 只接受严格格式的加密文件
 const handleImportUpload: UploadProps['onChange'] = async (files) => {
@@ -316,34 +299,6 @@ const handleImportUpload: UploadProps['onChange'] = async (files) => {
 };
 
 
-// 严格的加密意码数据验证
-const isValidEncryptedCedoss = (data: any): data is EncryptedCedoss => {
-  if (!data || typeof data !== 'object') return false;
-
-  for (const key in data) {
-    const item = data[key];
-
-    // 每个项必须符合 EncryptedCedossantItem 接口
-    if (!item || typeof item !== 'object') return false;
-    if (typeof item.value !== 'string') return false;
-    if (item.encrypted !== true) return false;
-
-    // 可选算法字段检查
-    if (item.algorithm && typeof item.algorithm !== 'string') return false;
-  }
-
-  return true;
-};
-
-// 读取文件为文本
-const readFileAsText = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve(e.target?.result as string);
-    reader.onerror = () => reject(new Error('文件读取失败'));
-    reader.readAsText(file);
-  });
-};
 
 // 布局设置变化
 const onLayoutChange = (val: boolean) => {
@@ -392,7 +347,7 @@ watch(() => CedossStore.decryptionKey, (newKey) => {
 
 // 组件挂载时设置初始状态
 onMounted(() => {
-   // 初始化 store
+  // 初始化 store
   CedossStore.initializeFromStorage();
   initializeState();
 });

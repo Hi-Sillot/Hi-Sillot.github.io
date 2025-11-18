@@ -2,11 +2,13 @@
 <script lang="ts" setup>
 import { computed, onMounted, watch } from "vue";
 import { Layout } from 'vuepress-theme-plume/client'
+import { isMobileDevice } from "../utils/env";
 import Backlink from "../plugins/BiGraph/client/components/Backlink.vue";
 import LocalGraph from "../plugins/BiGraph/client/components/LocalGraphView.vue";
 import GlobalGraph from "../plugins/BiGraph/client/components/GlobalGraphView.vue";
 import AuthorLink from "../plugins/vuepress-plugin-sillot-author/components/AuthorLink.vue";
 import SiteSettings from "../plugins/vuepress-plugin-sillot-site-settings/components/SiteSettings.vue";
+import mSiteSettings from "../plugins/vuepress-plugin-sillot-site-settings/components/mSiteSettings.vue";
 // https://theme-plume.vuejs.press/guide/api/client/#usedarkmode
 import { useDarkMode } from "vuepress-theme-plume/composables";
 // <n-config-provider :theme="isDark ? darkTheme : lightTheme"> 包裹 vuepress-theme-plume/client 的 <Layout>
@@ -45,7 +47,8 @@ const options = computed(() => {
       <backlink></backlink>
     </template>
     <template #nav-bar-content-after>
-      <SiteSettings />
+      <mSiteSettings v-if="isMobileDevice()" />
+      <SiteSettings v-if="!isMobileDevice()" />
     </template>
     <template #aside-outline-before>
       <local-graph v-if="options.enableLocalGraph"></local-graph>

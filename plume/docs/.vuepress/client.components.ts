@@ -7,10 +7,11 @@ import { setup } from "@css-render/vue3-ssr";
 import { NaiveUI } from "./modules/NaiveUi";
 import TestNaiveUi from "./components/TestNaiveUi.vue";
 // TDesign
-import TDesign from "tdesign-vue-next";
 import TestTDesign from "./components/TestTDesign.vue";
 // 引入组件库的少量全局样式变量
 import "tdesign-vue-next/es/style/index.css";
+import "tdesign-mobile-vue/es/style/index.css";
+import { isMobileDevice } from "./utils/env";
 
 // 组件
 import BannerTopArchived from "./plugins/vuepress-plugin-sillot-block/banner/components/BannerTopArchived.vue";
@@ -79,9 +80,16 @@ function setupNaiveUI(app: App, isSSR: boolean) {
 
 /**
  * 初始化 TDesign
+ * 调用侧同样使用 isMobileDevice 加载对应组件，刷新页面生效
  */
 function setupTDesign(app: App, isSSR: boolean) {
-  app.use(TDesign);
+  const ComponentLib = isMobileDevice()
+    ? import("tdesign-mobile-vue")
+    : import("tdesign-vue-next");
+
+  ComponentLib.then((lib) => {
+    app.use(lib.default);
+  });
 }
 
 /**

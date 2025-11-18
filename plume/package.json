@@ -28,6 +28,7 @@
     "http-server": "^14.1.1",
     "naive-ui": "^2.43.1",
     "pinia": "^3.0.3",
+    "tdesign-mobile-vue": "^1.11.0",
     "tdesign-vue-next": "^1.17.3",
     "typescript": "^5.9.3",
     "vfonts": "^0.0.3",
