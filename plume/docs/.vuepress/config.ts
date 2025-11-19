@@ -133,6 +133,7 @@ export default defineUserConfig({
      */
     markdown: {
       include: {}, // 启用引入其他 markdown 文件内容
+      collapse: true, // 启用折叠面板
       codeTree: true, // 启用代码目录树
       abbr: true, // 启用 abbr 语法  *[label]: content
       annotation: true, // 启用 annotation 语法  [+label]: content
