@@ -7,7 +7,7 @@ import Backlink from "../plugins/BiGraph/client/components/Backlink.vue";
 import LocalGraph from "../plugins/BiGraph/client/components/LocalGraphView.vue";
 import GlobalGraph from "../plugins/BiGraph/client/components/GlobalGraphView.vue";
 import AuthorLink from "../plugins/vuepress-plugin-sillot-author/components/AuthorLink.vue";
-import mSiteSettings from "../plugins/vuepress-plugin-sillot-site-settings/components/mSiteSettings.vue";
+import TSiteSettings from "../plugins/vuepress-plugin-sillot-site-settings/components/TSiteSettings.vue";
 import NSiteSettings from "../plugins/vuepress-plugin-sillot-site-settings/components/NSiteSettings.vue";
 // https://theme-plume.vuejs.press/guide/api/client/#usedarkmode
 import { useDarkMode } from "vuepress-theme-plume/composables";
@@ -27,7 +27,7 @@ const updateDarkMode = () => {
 const { isMobile, componentKey } = useDeviceDetection()
 
 const currentComponent = computed(() =>
-  isMobile.value ? mSiteSettings : NSiteSettings
+  isMobile.value ? TSiteSettings : NSiteSettings
 )
 
 watch(isDark, (newValue) => {
