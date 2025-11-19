@@ -57,3 +57,57 @@ export const isEncryptedCedossantItem = (
 ): value is EncryptedCedossantItem => {
   return value && typeof value === "object" && "value" in value;
 };
+
+/**
+ * 生成随机密钥的工具函数
+ * @param minLength 最小字符数（默认13）
+ * @param maxLength 最大字符数（默认13，即固定长度）
+ * @returns 生成的随机密钥字符串
+ */
+export const generateRandomKey = (
+  minLength: number = 13,
+  maxLength: number = 13,
+): string => {
+  // 参数验证
+  if (minLength <= 0 || maxLength <= 0) {
+    throw new Error("最小和最大字符数必须大于0");
+  }
+
+  if (minLength > maxLength) {
+    // 交换最小和最大值
+    [minLength, maxLength] = [maxLength, minLength];
+  }
+
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+  const length = minLength === maxLength
+    ? minLength
+    : Math.floor(Math.random() * (maxLength - minLength + 1)) + minLength;
+
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  return result;
+};
+
+/**
+ * 验证密钥是否符合要求
+ * @param key 要验证的密钥
+ * @param minLength 最小长度要求
+ * @param maxLength 最大长度要求
+ * @returns 验证结果
+ */
+export const validateKey = (
+  key: string,
+  minLength: number = 1,
+  maxLength: number = 100,
+): boolean => {
+  if (typeof key !== "string") return false;
+  if (key.length < minLength || key.length > maxLength) return false;
+
+  // 可选：添加字符集验证
+  const validChars = /^[A-Za-z0-9!@#$%^&*]+$/;
+  return validChars.test(key);
+};

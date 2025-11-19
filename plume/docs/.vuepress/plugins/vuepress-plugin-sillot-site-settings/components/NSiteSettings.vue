@@ -1,86 +1,95 @@
-<!-- 作用范围取决于挂载位置，当挂载到顶栏插槽他是全局的，挂载在页内插槽则仅影响当前页面 -->
 <template>
   <div>
-    <t-drawer v-model:visible="visible" attach="body" :mode="mode" :size="'520px'" :placement="placement" header="站点设置"
-      :footer="null" destroy-on-close>
-      <t-list>
-        <!-- 布局设置 -->
-        <t-list-item>
-          <template #action>
-            <t-switch v-model="compactLayoutEnabled" @change="onLayoutChange" />
-          </template>
-          <template #default>
+    <n-button style="margin-left: 18px" circle quaternary @click="visible = true">
+      <template #icon>
+        <n-icon>
+          <MenuApplicationIcon />
+        </n-icon>
+      </template>
+    </n-button>
+
+    <n-drawer v-model:show="visible" :width="520" :placement="placement" :resizable="true" display-directive="show">
+      <n-drawer-content title="站点设置" closable>
+        <n-list>
+          <!-- 布局设置 -->
+          <n-list-item>
+            <template #suffix>
+              <n-switch v-model:value="compactLayoutEnabled" @update:value="onLayoutChange" />
+            </template>
             <div class="setting-item">
               <div class="setting-label">紧凑布局</div>
               <div class="setting-description">在宽屏设备上启用更紧凑的布局</div>
             </div>
-          </template>
-        </t-list-item>
+          </n-list-item>
 
-        <!-- 密钥管理 -->
-        <t-list-item>
-          <template #action>
-            <t-button variant="outline" size="medium" @click="saveKey">保存</t-button>
-          </template>
-          <template #default>
+          <!-- 密钥管理 -->
+          <n-list-item>
+            <template #suffix>
+              <n-button type="primary" ghost size="medium" @click="saveKey">保存</n-button>
+            </template>
             <div class="setting-item">
               <div class="setting-label">加密密钥</div>
-              <t-input v-model="encryptionKey" type="password" placeholder="请输入加密密钥" :maxlength="13" show-limit-number>
-                <template #prefix-icon>
-                  <lock-on-icon />
+              <n-input v-model:value="encryptionKey" type="password" show-password-on="click" placeholder="请输入加密密钥"
+                maxlength="13" show-count clearable>
+                <template #prefix>
+                  <!-- <n-icon>
+                    <LockOnIcon />
+                  </n-icon> -->
+                  <n-button quaternary circle size="tiny" @click="handleGenerateKey">
+                    <template #icon>
+                      <n-icon>
+                        <RefreshIcon />
+                      </n-icon>
+                    </template>
+                  </n-button>
                 </template>
-                <template #suffix>
-                  <t-button variant="text" size="medium" @click="generateRandomKey">
-                    <refresh-icon />
-                  </t-button>
-                </template>
-              </t-input>
+              </n-input>
               <div class="setting-description">用于加解密映射文件，保存仅当前会话存储生效</div>
             </div>
-          </template>
-        </t-list-item>
+          </n-list-item>
 
-        <!-- 加密映射文件 -->
-        <t-list-item>
-          <template #action>
-            <t-upload v-model:files="encryptUploadFiles" :auto-upload="false" :show-file-list="false" accept=".json"
-              @change="handleEncryptUpload">
-            </t-upload>
-          </template>
-          <template #default>
+          <!-- 加密映射文件 -->
+          <n-list-item>
+            <template #suffix>
+              <n-upload :file-list="encryptUploadFiles" :default-upload="false" :show-file-list="false" accept=".json"
+                @change="handleEncryptUpload">
+                <n-button type="primary" ghost size="medium" class="upload-button">上传</n-button>
+              </n-upload>
+            </template>
             <div class="setting-item">
               <div class="setting-label">加密映射文件</div>
               <div class="setting-description">上传未加密映射文件，使用当前密钥加密后下载</div>
             </div>
-          </template>
-        </t-list-item>
+          </n-list-item>
 
-        <!-- 导入加密映射 -->
-        <t-list-item>
-          <template #action>
-            <t-upload v-model:files="importUploadFiles" :auto-upload="false" :show-file-list="false" accept=".json"
-              @change="handleImportUpload">
-            </t-upload>
-          </template>
-          <template #default>
+          <!-- 导入加密映射 -->
+          <n-list-item>
+            <template #suffix>
+              <n-upload :file-list="importUploadFiles" :default-upload="false" :show-file-list="false" accept=".json"
+                @change="handleImportUpload">
+                <n-button type="primary" ghost size="medium" class="upload-button">上传</n-button>
+              </n-upload>
+            </template>
             <div class="setting-item">
               <div class="setting-label">导入加密映射</div>
               <div class="setting-description">从JSON文件导入加密映射配置到站点</div>
             </div>
-          </template>
-        </t-list-item>
+          </n-list-item>
 
-        <!-- 状态信息 -->
-        <t-list-item v-if="statusMessage" class="status-message">
-          <div :class="['status-content', statusType]">
-            <t-icon :name="statusIcon" />
-            <span>{{ statusMessage }}</span>
-          </div>
-        </t-list-item>
+          <!-- 状态信息 -->
+          <n-list-item v-if="statusMessage" class="status-message">
+            <div :class="['status-content', statusType]">
+              <n-icon>
+                <CheckCircleFilledIcon v-if="statusType === 'success'" />
+                <ErrorCircleFilledIcon v-else-if="statusType === 'error'" />
+                <HelpCircleIcon v-else />
+              </n-icon>
+              <span>{{ statusMessage }}</span>
+            </div>
+          </n-list-item>
 
-        <!-- 加密预览 -->
-        <t-list-item v-if="encryptionPreview.length > 0">
-          <template #default>
+          <!-- 加密预览 -->
+          <n-list-item v-if="encryptionPreview.length > 0">
             <div class="preview-section">
               <div class="preview-header">加密预览（前{{ Math.min(encryptionPreview.length, 5) }}项）</div>
               <div class="preview-items">
@@ -92,20 +101,20 @@
                 </div>
               </div>
             </div>
-          </template>
-        </t-list-item>
+          </n-list-item>
 
-        <!-- 意码状态信息 -->
-        <t-list-item v-if="CedossStore.hasDecryptErrors" class="status-message">
-          <div class="status-content error">
-            <t-icon name="error-circle" />
-            <span>解密错误: {{ CedossStore.getDecryptErrors.length }} 个意码解密失败</span>
-          </div>
-        </t-list-item>
+          <!-- 意码状态信息 -->
+          <n-list-item v-if="CedossStore.hasDecryptErrors" class="status-message">
+            <div class="status-content error">
+              <n-icon>
+                <ErrorCircleFilledIcon />
+              </n-icon>
+              <span>解密错误: {{ CedossStore.getDecryptErrors.length }} 个意码解密失败</span>
+            </div>
+          </n-list-item>
 
-        <!-- 当前意码统计 -->
-        <t-list-item>
-          <template #default>
+          <!-- 当前意码统计 -->
+          <n-list-item>
             <div class="stats-section">
               <div class="stats-header">意码统计</div>
               <div class="stats-items">
@@ -123,32 +132,49 @@
                 </div>
               </div>
             </div>
-          </template>
-        </t-list-item>
-      </t-list>
-    </t-drawer>
-
-    <t-button style="margin-left: 18px;" shape="circle" variant="text" @click="visible = true">
-      <menu-application-icon :stroke-width="2" />
-    </t-button>
+          </n-list-item>
+        </n-list>
+      </n-drawer-content>
+    </n-drawer>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
-import { DrawerProps, SwitchProps, UploadProps, MessagePlugin, UploadFile } from 'tdesign-vue-next';
-import { MenuApplicationIcon, RefreshIcon, LockOnIcon } from 'tdesign-icons-vue-next';
+import { ref, watch, onMounted, onUnmounted, computed, shallowRef } from 'vue';
+import {
+  NButton,
+  NDrawer,
+  NDrawerContent,
+  NList,
+  NListItem,
+  NSwitch,
+  NInput,
+  NUpload,
+  NIcon,
+  useMessage,
+  type UploadFileInfo
+} from 'naive-ui';
+import {
+  MenuApplicationIcon,
+  RefreshIcon,
+  LockOnIcon,
+  CheckCircleFilledIcon,
+  ErrorCircleFilledIcon,
+  HelpCircleIcon
+} from 'tdesign-icons-vue-next';
 import { CedossMap, EncryptedCedossantItem, EncryptedCedoss, useCedossStore } from '../../vuepress-plugin-sillot-inline/stores/useCedoss';
-import { isValidEncryptedCedoss, readFileAsText, simpleXorCrypt } from '../handler/site-settings';
+import { generateRandomKey, isValidEncryptedCedoss, readFileAsText, simpleXorCrypt } from '../handler/site-settings';
 
+// 消息提示
+const message = useMessage();
 
 // 抽屉相关
 const visible = ref(false);
-const mode = ref<DrawerProps['mode']>('push');
-const placement = ref<DrawerProps['placement']>('right');
+const placement = ref<'right' | 'top' | 'bottom' | 'left'>('right');
 
-const importUploadFiles = ref<UploadFile[]>([]);
-const encryptUploadFiles = ref<UploadFile[]>([]);
+// 上传文件
+const importUploadFiles = ref<UploadFileInfo[]>([]);
+const encryptUploadFiles = ref<UploadFileInfo[]>([]);
 
 // 布局设置
 const compactLayoutEnabled = ref(false);
@@ -162,19 +188,18 @@ const encryptionPreview = ref<Array<{ key: string, original: string, encrypted: 
 const statusMessage = ref('');
 const statusType = ref<'success' | 'error' | 'info'>('info');
 
-// 状态图标
-const statusIcon = computed(() => {
-  switch (statusType.value) {
-    case 'success': return 'check-circle';
-    case 'error': return 'error-circle';
-    default: return 'help-circle';
-  }
-});
-
 // 显示状态消息
-const showStatus = (message: string, type: 'success' | 'error' | 'info' = 'info', duration: number = 3000) => {
-  statusMessage.value = message;
+const showStatus = (msg: string, type: 'success' | 'error' | 'info' = 'info', duration: number = 3000) => {
+  statusMessage.value = msg;
   statusType.value = type;
+
+  if (type === 'success') {
+    message.success(msg, { duration });
+  } else if (type === 'error') {
+    message.error(msg, { duration });
+  } else {
+    message.info(msg, { duration });
+  }
 
   if (duration > 0) {
     setTimeout(() => {
@@ -184,13 +209,9 @@ const showStatus = (message: string, type: 'success' | 'error' | 'info' = 'info'
 };
 
 // 生成随机密钥
-const generateRandomKey = () => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-  let result = '';
-  for (let i = 0; i < 16; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  encryptionKey.value = result;
+const handleGenerateKey = () => {
+  // 生成8-20个字符的随机密钥
+  encryptionKey.value = generateRandomKey(13, 13);
   showStatus('已生成随机密钥', 'success');
 };
 
@@ -206,11 +227,9 @@ const saveKey = () => {
 };
 
 // 处理加密上传 - 加密用户上传的映射文件并下载（使用新格式）
-const handleEncryptUpload: UploadProps['onChange'] = async (files) => {
-  if (!files || files.length === 0) return;
-
-  const file = files[0];
-  if (!file.raw) return;
+const handleEncryptUpload = async (data: { file: UploadFileInfo, fileList: UploadFileInfo[] }) => {
+  const { file } = data;
+  if (!file) return;
 
   // 检查密钥
   if (!encryptionKey.value.trim()) {
@@ -220,7 +239,7 @@ const handleEncryptUpload: UploadProps['onChange'] = async (files) => {
   }
 
   try {
-    const text = await readFileAsText(file.raw);
+    const text = await readFileAsText(file.file as File);
     const mappingData = JSON.parse(text) as CedossMap;
 
     // 使用新格式加密映射数据 { value: string, encrypted: true, algorithm: string }
@@ -268,16 +287,13 @@ const handleEncryptUpload: UploadProps['onChange'] = async (files) => {
   }
 };
 
-
 // 处理导入上传 - 只接受严格格式的加密文件
-const handleImportUpload: UploadProps['onChange'] = async (files) => {
-  if (!files || files.length === 0) return;
-
-  const file = files[0];
-  if (!file.raw) return;
+const handleImportUpload = async (data: { file: UploadFileInfo, fileList: UploadFileInfo[] }) => {
+  const { file } = data;
+  if (!file) return;
 
   try {
-    const text = await readFileAsText(file.raw);
+    const text = await readFileAsText(file.file as File);
     const encryptedData = JSON.parse(text);
 
     // 严格验证：必须符合 EncryptedCedoss 接口
@@ -293,12 +309,10 @@ const handleImportUpload: UploadProps['onChange'] = async (files) => {
     console.error('导入失败:', error);
     showStatus(`导入失败: ${error}`, 'error');
   } finally {
-    // 清空上传文件列表：通过清空绑定的响应式数组实现
+    // 清空上传文件列表
     importUploadFiles.value = [];
   }
 };
-
-
 
 // 布局设置变化
 const onLayoutChange = (val: boolean) => {
@@ -310,9 +324,9 @@ const onLayoutChange = (val: boolean) => {
 // 更新body类
 const updateBodyClass = () => {
   if (compactLayoutEnabled.value) {
-    document.body.classList.add('compact-layout');
-  } else {
     document.body.classList.remove('compact-layout');
+  } else {
+    document.body.classList.add('compact-layout');
   }
 };
 
@@ -340,6 +354,7 @@ watch(compactLayoutEnabled, () => {
   updateBodyClass();
   saveLayoutSetting();
 });
+
 // 监听 store 密钥变化
 watch(() => CedossStore.decryptionKey, (newKey) => {
   encryptionKey.value = newKey;
@@ -508,29 +523,21 @@ onUnmounted(() => {
   color: var(--td-error-color);
 }
 
-:deep(.t-list-item__action) {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.upload-button {
+  margin-top: 8px;
 }
 
-:deep(.t-upload) {
-  display: inline-block;
-}
-</style>
-
-<style>
-/* 全局样式 - 紧凑布局 */
-@media (1400px <=width <=2400px) {
-  body.compact-layout {
+/* 全局样式 - 紧凑布局开关 */
+@media (min-width: 1400px) and (max-width: 2400px) {
+  :global(body.compact-layout) {
     --vp-layout-max-width: 94vw !important;
   }
 
-  body.compact-layout .vp-doc-container.has-aside .content-container {
+  :global(body.compact-layout .vp-doc-container.has-aside .content-container) {
     max-width: 1300px !important;
   }
 
-  body.compact-layout .vp-doc-container:not(.has-sidebar) .container {
+  :global(body.compact-layout .vp-doc-container:not(.has-sidebar) .container) {
     max-width: 1300px !important;
   }
 }

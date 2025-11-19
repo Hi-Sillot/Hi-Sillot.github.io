@@ -7,11 +7,9 @@ import { setup } from "@css-render/vue3-ssr";
 import { NaiveUI } from "./modules/NaiveUi";
 import TestNaiveUi from "./components/TestNaiveUi.vue";
 // TDesign
-import TestTDesign from "./components/TestTDesign.vue";
+import mTDesign from 'tdesign-mobile-vue';
 // 引入组件库的少量全局样式变量
-import "tdesign-vue-next/es/style/index.css";
 import "tdesign-mobile-vue/es/style/index.css";
-import { isMobileDevice } from "./utils/env";
 
 // 组件
 import BannerTopArchived from "./plugins/vuepress-plugin-sillot-block/banner/components/BannerTopArchived.vue";
@@ -42,7 +40,6 @@ export const components = {
   GithubLabel,
   C,
   TestNaiveUi,
-  TestTDesign,
   TestRelationGraph,
   SSRComponent,
   IndexMe,
@@ -81,16 +78,17 @@ function setupNaiveUI(app: App, isSSR: boolean) {
 /**
  * 初始化 TDesign
  * 调用侧同样使用 isMobileDevice 加载对应组件，刷新页面生效
+ * 还是有些问题无法解决，最终放弃混用
  */
-function setupTDesign(app: App, isSSR: boolean) {
-  const ComponentLib = isMobileDevice()
-    ? import("tdesign-mobile-vue")
-    : import("tdesign-vue-next");
+// function setupTDesign(app: App, isSSR: boolean) {
+//   const ComponentLib = isMobileDevice()
+//     ? import("tdesign-mobile-vue")
+//     : import("tdesign-vue-next");
 
-  ComponentLib.then((lib) => {
-    app.use(lib.default);
-  });
-}
+//   ComponentLib.then((lib) => {
+//     app.use(lib.default);
+//   });
+// }
 
 /**
  * 初始化所有组件库
@@ -103,8 +101,7 @@ export async function setupUI(context: EnhanceContext) {
   // 初始化 NaiveUI
   setupNaiveUI(app, isSSR);
   // 初始化 TDesign
-  setupTDesign(app, isSSR);
-  // app.use(TDesign);
+  app.use(mTDesign);
 
   // 注册全局组件，不在 md 中使用则不需注册
   registerGlobalComponents(context.app);
