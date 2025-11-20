@@ -4,6 +4,7 @@ import type { Plugin } from "@vuepress/core";
 import type { Markdown } from "vuepress/markdown";
 import { extendSillotVideoTabs, handleVideoTabs, parseAttrs } from "./tabs/sillot-video-tabs";
 import { initIndexMe } from "./banner/indexMe";
+import type { PluginOptions } from "./types";
 
 let TAG = "vuepress-plugin-sillot-block";
 
@@ -13,7 +14,7 @@ let TAG = "vuepress-plugin-sillot-block";
 export default (options: PluginOptions = {}): Plugin => {
   console.log(`[${TAG}] 插件加载成功`, JSON.stringify(options));
   return {
-    name: "vuepress-plugin-sillot-tabs", // 插件名称
+    name: TAG, // 插件名称
 
     async onInitialized(app) {
       initIndexMe(app);

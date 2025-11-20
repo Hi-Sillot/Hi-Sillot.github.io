@@ -1,4 +1,5 @@
 import type { Markdown } from "vuepress/markdown";
+import type { PluginOptions, TagHandlers, VideoTabConfig } from "../types";
 
 
 export function extendSillotVideoTabs(

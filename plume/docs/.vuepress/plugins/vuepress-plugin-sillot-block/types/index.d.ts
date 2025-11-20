@@ -1,13 +1,13 @@
 
-interface TagHandler {
+export interface TagHandler {
   (attrs: Record<string, string>, pluginOptions: any): string;
 }
 
-interface TagHandlers {
+export interface TagHandlers {
   [key: string]: TagHandler;
 }
 
-interface VideoTabConfig {
+export interface VideoTabConfig {
   title: string;
   code: string;
   height: string;
@@ -15,7 +15,7 @@ interface VideoTabConfig {
   attrKey: string;
 }
 
-interface PluginOptions {
+export interface PluginOptions {
   videoTabs?: {
     tabs?: Partial<VideoTabConfig>[]; // 使用 Partial 允许部分配置
   };

@@ -5,6 +5,7 @@ import { slimsearchPlugin } from "@vuepress/plugin-slimsearch";
 import BiGraph from "./plugins/BiGraph/client/index";
 import AuthorPlugin from "./plugins/vuepress-plugin-sillot-author";
 import SillotBlockPlugin from "./plugins/vuepress-plugin-sillot-block";
+import vuepressPluginSillotCedoss from "./plugins/vuepress-plugin-sillot-cedoss";
 import { Jieba } from "@node-rs/jieba";
 import { dict } from "@node-rs/jieba/dict.js";
 
@@ -15,6 +16,7 @@ export default [
     llmsPlugin({
       // 配置项
     }),
+    vuepressPluginSillotCedoss(),
     // 注册Sillot标签插件（传入自定义配置）
     SillotBlockPlugin({
       videoTabs: {},
