@@ -140,8 +140,12 @@ import {
   ViewListIcon
 } from 'tdesign-icons-vue-next';
 import { useCedossStore } from '../../vuepress-plugin-sillot-cedoss/stores/useCedoss';
-import { generateRandomKey, isValidEncryptedCedoss, readFileAsText, simpleXorCrypt } from '../handler/site-settings';
-
+import { 
+  useStatusMessage, 
+  useEncryptionKey, 
+  handleFileUpload, 
+  downloadEncryptedFile 
+} from '../handler/site-settings';
 
 // 弹出层可见性
 const visible = ref(false);
@@ -150,14 +154,13 @@ const visible = ref(false);
 const encryptFileInput = ref<HTMLInputElement>();
 const importFileInput = ref<HTMLInputElement>();
 
-// 加密相关
+// 状态管理
+const { statusMessage, statusType, showStatus } = useStatusMessage();
 const CedossStore = useCedossStore();
-const encryptionKey = ref('');
-const encryptionPreview = ref<Array<{ key: string, original: string, encrypted: string }>>([]);
 
-// 状态消息
-const statusMessage = ref('');
-const statusType = ref<'success' | 'error' | 'info'>('info');
+// 加密管理
+const { encryptionKey, generateKey } = useEncryptionKey(CedossStore.decryptionKey);
+const encryptionPreview = ref<Array<{ key: string, original: string, encrypted: string }>>([]);
 
 // 状态图标
 const statusIcon = computed(() => {
@@ -168,22 +171,9 @@ const statusIcon = computed(() => {
   }
 });
 
-// 显示状态消息
-const showStatus = (message: string, type: 'success' | 'error' | 'info' = 'info', duration: number = 3000) => {
-  statusMessage.value = message;
-  statusType.value = type;
-
-  if (duration > 0) {
-    setTimeout(() => {
-      statusMessage.value = '';
-    }, duration);
-  }
-};
-
 // 生成随机密钥
 const handleGenerateKey = () => {
-  // 生成8-20个字符的随机密钥
-  encryptionKey.value = generateRandomKey(13, 13);
+  generateKey(13, 13);
   showStatus('已生成随机密钥', 'success');
 };
 
@@ -218,53 +208,17 @@ const handleEncryptUpload = async (event: Event) => {
   if (!input.files || input.files.length === 0) return;
 
   const file = input.files[0];
+  const result = await handleFileUpload(file, encryptionKey.value, 'encrypt');
 
-  try {
-    const text = await readFileAsText(file);
-    const mappingData = JSON.parse(text);
-
-    // 加密数据
-    const encryptedData: any = {};
-    const previewItems: Array<{ key: string, original: string, encrypted: string }> = [];
-
-    for (const [key, value] of Object.entries(mappingData)) {
-      if (typeof value === 'string') {
-        const encryptedValue = simpleXorCrypt(value, encryptionKey.value);
-        encryptedData[key] = {
-          value: encryptedValue,
-          encrypted: true,
-          algorithm: "xor"
-        };
-        previewItems.push({
-          key,
-          original: value.length > 15 ? value.substring(0, 15) + '...' : value,
-          encrypted: encryptedValue.length > 15 ? encryptedValue.substring(0, 15) + '...' : encryptedValue
-        });
-      }
-    }
-
-    // 更新预览
-    encryptionPreview.value = previewItems;
-
-    // 下载加密文件
-    const blob = new Blob([JSON.stringify(encryptedData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `encrypted-mapping-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
+  if (result.success) {
+    downloadEncryptedFile(result.data!);
+    encryptionPreview.value = result.previewItems || [];
     showStatus('加密映射文件已生成并下载', 'success');
-  } catch (error) {
-    console.error('加密失败:', error);
-    showStatus('加密失败，请检查文件格式', 'error');
-  } finally {
-    // 清空文件输入
-    if (input) input.value = '';
+  } else {
+    showStatus(`加密失败: ${result.error}`, 'error');
   }
+  
+  if (input) input.value = '';
 };
 
 // 处理导入上传
@@ -273,43 +227,26 @@ const handleImportUpload = async (event: Event) => {
   if (!input.files || input.files.length === 0) return;
 
   const file = input.files[0];
+  const result = await handleFileUpload(file, encryptionKey.value, 'import');
 
-  try {
-    const text = await readFileAsText(file);
-    const encryptedData = JSON.parse(text);
-
-    // 验证数据格式
-    if (!isValidEncryptedCedoss(encryptedData)) {
-      throw new Error('文件格式不符合加密意码标准');
-    }
-
-    // 加载到store
-    CedossStore.loadEncryptedCedoss(encryptedData);
-    showStatus(`成功导入 ${Object.keys(encryptedData).length} 个加密意码`, 'success');
-
-  } catch (error) {
-    console.error('导入失败:', error);
-    showStatus(`导入失败: ${error}`, 'error');
-  } finally {
-    // 清空文件输入
-    if (input) input.value = '';
+  if (result.success) {
+    CedossStore.loadEncryptedCedoss(result.data);
+    showStatus(`成功导入 ${Object.keys(result.data).length} 个加密意码`, 'success');
+  } else {
+    showStatus(`导入失败: ${result.error}`, 'error');
   }
-};
-
-
-// 初始化状态
-const initializeState = () => {
-  encryptionKey.value = CedossStore.decryptionKey;
+  
+  if (input) input.value = '';
 };
 
 // 组件挂载时初始化
 onMounted(() => {
   CedossStore.initializeFromStorage();
-  initializeState();
 });
 </script>
 
 <style scoped>
+/* 样式保持不变，与之前相同 */
 .navbar-settings {
   display: inline-flex;
   align-items: center;
@@ -533,7 +470,6 @@ onMounted(() => {
   color: var(--td-brand-color);
 }
 
-/* 响应式调整 */
 @media (max-width: 768px) {
   .panel-content {
     padding: 12px 16px;

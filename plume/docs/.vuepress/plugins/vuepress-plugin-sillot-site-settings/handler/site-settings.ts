@@ -1,8 +1,11 @@
-import type { Ref } from "vue";
+// handler/site-settings.ts
+
+import { readonly, ref, type Ref } from "vue";
 import type {
+  CedossMap,
   EncryptedCedoss,
   EncryptedCedossantItem,
-} from "../../vuepress-plugin-sillot-inline/stores/useCedoss";
+} from "../../vuepress-plugin-sillot-cedoss/stores/useCedoss";
 
 /**
  * 严格的加密意码数据验证
@@ -111,3 +114,229 @@ export const validateKey = (
   const validChars = /^[A-Za-z0-9!@#$%^&*]+$/;
   return validChars.test(key);
 };
+
+
+/**
+ * 加密映射数据的核心逻辑
+ * @param mappingData 原始映射数据
+ * @param encryptionKey 加密密钥
+ * @param previewLength 预览文本长度（默认15）
+ * @returns 加密后的数据和预览项
+ */
+export const encryptMappingData = (
+  mappingData: CedossMap,
+  encryptionKey: string,
+  previewLength: number = 15,
+): {
+  encryptedData: EncryptedCedoss;
+  previewItems: Array<{ key: string; original: string; encrypted: string }>;
+} => {
+  const encryptedData: EncryptedCedoss = {};
+  const previewItems: Array<{ key: string; original: string; encrypted: string }> = [];
+
+  for (const [key, value] of Object.entries(mappingData)) {
+    if (typeof value === "string") {
+      const encryptedValue = simpleXorCrypt(value, encryptionKey);
+      // 使用新格式
+      encryptedData[key] = {
+        value: encryptedValue,
+        encrypted: true,
+        algorithm: "xor",
+      };
+      previewItems.push({
+        key,
+        original: value.length > previewLength
+          ? value.substring(0, previewLength) + "..."
+          : value,
+        encrypted: encryptedValue.length > previewLength
+          ? encryptedValue.substring(0, previewLength) + "..."
+          : encryptedValue,
+      });
+    }
+  }
+
+  return { encryptedData, previewItems };
+};
+
+/**
+ * 下载加密文件的通用逻辑
+ * @param encryptedData 加密后的数据
+ * @param filename 文件名（不包含日期部分）
+ */
+export const downloadEncryptedFile = (
+  encryptedData: EncryptedCedoss,
+  filename: string = "encrypted-mapping",
+): void => {
+  const blob = new Blob([JSON.stringify(encryptedData, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filename}-${new Date().toISOString().split("T")[0]}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+/**
+ * 处理文件上传的通用逻辑
+ * @param file 上传的文件
+ * @param encryptionKey 加密密钥（用于加密操作）
+ * @param operationType 操作类型：'encrypt' | 'import'
+ * @returns 操作结果
+ */
+export const handleFileUpload = async (
+  file: File,
+  encryptionKey: string,
+  operationType: "encrypt" | "import",
+): Promise<{
+  success: boolean;
+  data?: any;
+  previewItems?: Array<{ key: string; original: string; encrypted: string }>;
+  error?: string;
+}> => {
+  try {
+    const text = await readFileAsText(file);
+    const fileData = JSON.parse(text);
+
+    if (operationType === "encrypt") {
+      if (!encryptionKey.trim()) {
+        throw new Error("请先设置加密密钥");
+      }
+
+      const { encryptedData, previewItems } = encryptMappingData(
+        fileData,
+        encryptionKey,
+      );
+
+      return {
+        success: true,
+        data: encryptedData,
+        previewItems,
+      };
+    } else {
+      // import 操作
+      if (!isValidEncryptedCedoss(fileData)) {
+        throw new Error("文件格式不符合加密意码标准");
+      }
+
+      return {
+        success: true,
+        data: fileData,
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "未知错误",
+    };
+  }
+};
+
+/**
+ * 状态消息管理
+ */
+export const useStatusMessage = () => {
+  const statusMessage = ref("");
+  const statusType = ref<"success" | "error" | "info">("info");
+
+  const showStatus = (
+    message: string,
+    type: "success" | "error" | "info" = "info",
+    duration: number = 3000,
+  ): void => {
+    statusMessage.value = message;
+    statusType.value = type;
+
+    if (duration > 0) {
+      setTimeout(() => {
+        statusMessage.value = "";
+      }, duration);
+    }
+  };
+
+  const clearStatus = (): void => {
+    statusMessage.value = "";
+  };
+
+  return {
+    statusMessage: readonly(statusMessage),
+    statusType: readonly(statusType),
+    showStatus,
+    clearStatus,
+  };
+};
+
+/**
+ * 布局设置管理
+ */
+export const useLayoutSettings = () => {
+  const compactLayoutEnabled = ref(false);
+
+  const updateBodyClass = (): void => {
+    if (compactLayoutEnabled.value) {
+      document.body.classList.remove("compact-layout");
+    } else {
+      document.body.classList.add("compact-layout");
+    }
+  };
+
+  const saveLayoutSetting = (): void => {
+    localStorage.setItem(
+      "compactLayoutEnabled",
+      compactLayoutEnabled.value.toString(),
+    );
+  };
+
+  const loadLayoutSetting = (): void => {
+    const savedLayout = localStorage.getItem("compactLayoutEnabled");
+    if (savedLayout !== null) {
+      compactLayoutEnabled.value = savedLayout === "true";
+    }
+    updateBodyClass();
+  };
+
+  const toggleLayout = (value: boolean): void => {
+    compactLayoutEnabled.value = value;
+    updateBodyClass();
+    saveLayoutSetting();
+  };
+
+  return {
+    compactLayoutEnabled,
+    updateBodyClass,
+    saveLayoutSetting,
+    loadLayoutSetting,
+    toggleLayout,
+  };
+};
+
+/**
+ * 密钥管理
+ */
+export const useEncryptionKey = (initialKey: string = "") => {
+  const encryptionKey = ref(initialKey);
+
+  const generateKey = (minLength: number = 13, maxLength: number = 13): void => {
+    encryptionKey.value = generateRandomKey(minLength, maxLength);
+  };
+
+  const validateCurrentKey = (minLength: number = 1, maxLength: number = 100): boolean => {
+    return validateKey(encryptionKey.value, minLength, maxLength);
+  };
+
+  return {
+    encryptionKey,
+    generateKey,
+    validateCurrentKey,
+  };
+};
+
+// 预览项类型定义
+export interface PreviewItem {
+  key: string;
+  original: string;
+  encrypted: string;
+}

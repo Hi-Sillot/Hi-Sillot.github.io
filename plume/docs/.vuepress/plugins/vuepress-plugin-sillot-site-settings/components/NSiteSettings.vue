@@ -32,9 +32,6 @@
               <n-input v-model:value="encryptionKey" type="password" show-password-on="click" placeholder="请输入加密密钥"
                 maxlength="13" show-count clearable>
                 <template #prefix>
-                  <!-- <n-icon>
-                    <LockOnIcon />
-                  </n-icon> -->
                   <n-button quaternary circle size="tiny" @click="handleGenerateKey">
                     <template #icon>
                       <n-icon>
@@ -140,7 +137,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, watch, onMounted, onUnmounted, computed, shallowRef } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import {
   NButton,
   NDrawer,
@@ -157,13 +154,18 @@ import {
 import {
   MenuApplicationIcon,
   RefreshIcon,
-  LockOnIcon,
   CheckCircleFilledIcon,
   ErrorCircleFilledIcon,
   HelpCircleIcon
 } from 'tdesign-icons-vue-next';
-import { CedossMap, EncryptedCedossantItem, EncryptedCedoss, useCedossStore } from '../../vuepress-plugin-sillot-cedoss/stores/useCedoss';
-import { generateRandomKey, isValidEncryptedCedoss, readFileAsText, simpleXorCrypt } from '../handler/site-settings';
+import { useCedossStore } from '../../vuepress-plugin-sillot-cedoss/stores/useCedoss';
+import { 
+  useStatusMessage, 
+  useEncryptionKey, 
+  useLayoutSettings,
+  handleFileUpload, 
+  downloadEncryptedFile 
+} from '../handler/site-settings';
 
 // 消息提示
 const message = useMessage();
@@ -176,42 +178,18 @@ const placement = ref<'right' | 'top' | 'bottom' | 'left'>('right');
 const importUploadFiles = ref<UploadFileInfo[]>([]);
 const encryptUploadFiles = ref<UploadFileInfo[]>([]);
 
-// 布局设置
-const compactLayoutEnabled = ref(false);
-
-// 加密相关
+// 状态管理
+const { statusMessage, statusType, showStatus } = useStatusMessage();
 const CedossStore = useCedossStore();
-const encryptionKey = ref('');
+
+// 布局和加密管理
+const { compactLayoutEnabled, toggleLayout, loadLayoutSetting } = useLayoutSettings();
+const { encryptionKey, generateKey } = useEncryptionKey(CedossStore.decryptionKey);
 const encryptionPreview = ref<Array<{ key: string, original: string, encrypted: string }>>([]);
-
-// 状态消息
-const statusMessage = ref('');
-const statusType = ref<'success' | 'error' | 'info'>('info');
-
-// 显示状态消息
-const showStatus = (msg: string, type: 'success' | 'error' | 'info' = 'info', duration: number = 3000) => {
-  statusMessage.value = msg;
-  statusType.value = type;
-
-  if (type === 'success') {
-    message.success(msg, { duration });
-  } else if (type === 'error') {
-    message.error(msg, { duration });
-  } else {
-    message.info(msg, { duration });
-  }
-
-  if (duration > 0) {
-    setTimeout(() => {
-      statusMessage.value = '';
-    }, duration);
-  }
-};
 
 // 生成随机密钥
 const handleGenerateKey = () => {
-  // 生成8-20个字符的随机密钥
-  encryptionKey.value = generateRandomKey(13, 13);
+  generateKey(13, 13);
   showStatus('已生成随机密钥', 'success');
 };
 
@@ -226,134 +204,46 @@ const saveKey = () => {
   showStatus('密钥已保存并应用', 'success');
 };
 
-// 处理加密上传 - 加密用户上传的映射文件并下载（使用新格式）
+// 处理加密上传
 const handleEncryptUpload = async (data: { file: UploadFileInfo, fileList: UploadFileInfo[] }) => {
   const { file } = data;
   if (!file) return;
 
-  // 检查密钥
-  if (!encryptionKey.value.trim()) {
-    showStatus('请先设置加密密钥', 'error');
-    encryptUploadFiles.value = [];
-    return;
-  }
+  const result = await handleFileUpload(file.file as File, encryptionKey.value, 'encrypt');
 
-  try {
-    const text = await readFileAsText(file.file as File);
-    const mappingData = JSON.parse(text) as CedossMap;
-
-    // 使用新格式加密映射数据 { value: string, encrypted: true, algorithm: string }
-    const encryptedData: EncryptedCedoss = {};
-    const previewItems: Array<{ key: string, original: string, encrypted: string }> = [];
-
-    for (const [key, value] of Object.entries(mappingData)) {
-      if (typeof value === 'string') {
-        const encryptedValue = simpleXorCrypt(value, encryptionKey.value);
-        // 使用新格式
-        encryptedData[key] = {
-          value: encryptedValue,
-          encrypted: true,
-          algorithm: "xor"
-        };
-        previewItems.push({
-          key,
-          original: value.length > 20 ? value.substring(0, 20) + '...' : value,
-          encrypted: encryptedValue.length > 20 ? encryptedValue.substring(0, 20) + '...' : encryptedValue
-        });
-      }
-    }
-
-    // 更新预览
-    encryptionPreview.value = previewItems;
-
-    // 创建加密文件并下载
-    const blob = new Blob([JSON.stringify(encryptedData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `encrypted-mapping-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
+  if (result.success) {
+    downloadEncryptedFile(result.data!);
+    encryptionPreview.value = result.previewItems || [];
     showStatus('加密映射文件已生成并下载（新格式）', 'success');
-  } catch (error) {
-    console.error('加密失败:', error);
-    showStatus('加密失败，请检查文件格式', 'error');
-  } finally {
-    // 清空上传文件列表
-    encryptUploadFiles.value = [];
+  } else {
+    showStatus(`加密失败: ${result.error}`, 'error');
   }
+  
+  encryptUploadFiles.value = [];
 };
 
-// 处理导入上传 - 只接受严格格式的加密文件
+// 处理导入上传
 const handleImportUpload = async (data: { file: UploadFileInfo, fileList: UploadFileInfo[] }) => {
   const { file } = data;
   if (!file) return;
 
-  try {
-    const text = await readFileAsText(file.file as File);
-    const encryptedData = JSON.parse(text);
+  const result = await handleFileUpload(file.file as File, encryptionKey.value, 'import');
 
-    // 严格验证：必须符合 EncryptedCedoss 接口
-    if (!isValidEncryptedCedoss(encryptedData)) {
-      throw new Error('文件格式不符合加密意码标准');
-    }
-
-    // 加载到store
-    CedossStore.loadEncryptedCedoss(encryptedData);
-    showStatus(`成功导入 ${Object.keys(encryptedData).length} 个加密意码`, 'success');
-
-  } catch (error) {
-    console.error('导入失败:', error);
-    showStatus(`导入失败: ${error}`, 'error');
-  } finally {
-    // 清空上传文件列表
-    importUploadFiles.value = [];
+  if (result.success) {
+    CedossStore.loadEncryptedCedoss(result.data);
+    showStatus(`成功导入 ${Object.keys(result.data).length} 个加密意码`, 'success');
+  } else {
+    showStatus(`导入失败: ${result.error}`, 'error');
   }
+  
+  importUploadFiles.value = [];
 };
 
 // 布局设置变化
 const onLayoutChange = (val: boolean) => {
-  updateBodyClass();
-  saveLayoutSetting();
+  toggleLayout(val);
   showStatus(val ? '紧凑布局已启用' : '紧凑布局已禁用', 'info');
 };
-
-// 更新body类
-const updateBodyClass = () => {
-  if (compactLayoutEnabled.value) {
-    document.body.classList.remove('compact-layout');
-  } else {
-    document.body.classList.add('compact-layout');
-  }
-};
-
-// 初始化状态
-const initializeState = () => {
-  // 从store加载当前密钥
-  encryptionKey.value = CedossStore.decryptionKey;
-
-  // 从localStorage加载布局设置
-  const savedLayout = localStorage.getItem('compactLayoutEnabled');
-  if (savedLayout !== null) {
-    compactLayoutEnabled.value = savedLayout === 'true';
-  }
-
-  updateBodyClass();
-};
-
-// 保存布局设置到localStorage
-const saveLayoutSetting = () => {
-  localStorage.setItem('compactLayoutEnabled', compactLayoutEnabled.value.toString());
-};
-
-// 监听布局变化
-watch(compactLayoutEnabled, () => {
-  updateBodyClass();
-  saveLayoutSetting();
-});
 
 // 监听 store 密钥变化
 watch(() => CedossStore.decryptionKey, (newKey) => {
@@ -362,9 +252,9 @@ watch(() => CedossStore.decryptionKey, (newKey) => {
 
 // 组件挂载时设置初始状态
 onMounted(() => {
-  // 初始化 store
   CedossStore.initializeFromStorage();
-  initializeState();
+  loadLayoutSetting();
+  encryptionKey.value = CedossStore.decryptionKey;
 });
 
 // 组件卸载时清理
@@ -527,7 +417,6 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
-/* 全局样式 - 紧凑布局开关 */
 @media (min-width: 1400px) and (max-width: 2400px) {
   :global(body.compact-layout) {
     --vp-layout-max-width: 94vw !important;

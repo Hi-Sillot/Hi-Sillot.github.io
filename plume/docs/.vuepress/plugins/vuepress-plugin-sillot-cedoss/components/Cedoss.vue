@@ -5,7 +5,7 @@
   <component :is="tag" v-else class="const-error" :class="`const-error--${errorMode}`" :title="errorTooltip"
     @click="handleErrorClick">
     <span class="const-error__icon">⚠️</span>
-    <span v-if="errorMode === 'verbose'" class="const-error__text">INVALID</span>
+    <span v-if="errorMode === 'verbose'" class="const-error__text">{{ id }}</span>
   </component>
 </template>
 
@@ -54,7 +54,7 @@ const constValue = computed(() => {
 const isEncrypted = computed(() => {
   // 如果强制加密样式，直接返回true
   if (props.forceEncryptStyle) return true
-  
+
   // 检查是否为加密意码
   return store.isEncrypted(props.id)
 })
@@ -64,17 +64,17 @@ const isEncrypted = computed(() => {
  */
 const displayValue = computed(() => {
   const value = constValue.value
-  
+
   // 如果是解密失败的值，显示错误提示
   if (value && value.startsWith('DECRYPT_FAILED:')) {
     return `[解密失败:${props.id}]`
   }
-  
+
   // 如果是缺失的值，显示缺失提示
   if (value && value.startsWith('MISSING:')) {
     return `[缺失:${props.id}]`
   }
-  
+
   return value
 })
 
@@ -83,15 +83,15 @@ const displayValue = computed(() => {
  */
 const errorTooltip = computed(() => {
   const value = constValue.value
-  
+
   if (value && value.startsWith('DECRYPT_FAILED:')) {
     return `意码解密失败: ${props.id}\n请检查密钥是否正确`
   }
-  
+
   if (value && value.startsWith('MISSING:')) {
     return `意码不存在: ${props.id}`
   }
-  
+
   return `无效的意码ID: ${props.id}\n点击可复制ID`
 })
 
