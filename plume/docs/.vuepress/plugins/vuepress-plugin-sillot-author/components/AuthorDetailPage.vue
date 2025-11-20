@@ -69,8 +69,8 @@ onMounted(() => {
         <div class="author-header">
           <div class="avatar-container">
             <VerifiedAvatar avatar-type="slot" :alt-text="author.name" :avatar-size="150" shape="circle"
-              :badge-size="40" badge-type="yellow" :show-badge="author.verified" :show-tooltip="true"
-              :border-width="1.86" border-color="#aaaaaa" :shadow="true">
+              :badge-size="36" badge-type="yellow" :show-badge="author.verified" :show-tooltip="true"
+              :border-width="10" border-color="#aaaaaa" :shadow="true">
               <img v-if="author.avatar" :src="author.avatar" class="avatar" :alt="author.name" />
               <div v-else class="avatar-placeholder">
                 {{ author.name.charAt(0).toUpperCase() }}
@@ -242,7 +242,7 @@ onMounted(() => {
   background: linear-gradient(135deg, var(--vp-c-brand) 0%, var(--vp-c-brand-dark) 100%);
   font-size: 3rem;
   font-weight: bold;
-  border: 4px dashed white;
+  border: 2px dashed #ffffff58;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
 }
 

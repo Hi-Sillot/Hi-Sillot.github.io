@@ -28,9 +28,9 @@
         { 'badge-with-border': badgeBorder }
       ]" :style="badgeStyle" @click="handleBadgeClick">
         <!-- 图标支持字体图标或图片 -->
-        <i v-if="badgeIconType === 'iconfont'" :class="badgeIcon" class="badge-icon-font"></i>
-        <img v-else-if="badgeIconType === 'image'" :src="badgeIcon" class="badge-icon-image" />
-        <span v-else class="badge-icon-text">{{ badgeIcon }}</span>
+        <i v-if="badgeIconType === 'iconfont'" :class="badgeIcon" class="badge-icon-font" :style="iconStyle"></i>
+        <img v-else-if="badgeIconType === 'image'" :src="badgeIcon" class="badge-icon-image" :style="iconStyle" />
+        <span v-else class="badge-icon-text" :style="iconStyle">{{ badgeIcon }}</span>
 
         <!-- 徽章工具提示 -->
         <div v-if="showTooltip" class="badge-tooltip">
@@ -155,6 +155,15 @@ export default {
       }
     },
 
+    // 图标大小比例 (相对于徽章大小)
+    iconScale: {
+      type: Number,
+      default: 0.6,
+      validator: (value) => {
+        return value > 0 && value <= 1;
+      }
+    },
+
     badgeBorder: {
       type: Boolean,
       default: false
@@ -218,6 +227,21 @@ export default {
     isLocalImage: {
       type: Boolean,
       default: false
+    },
+
+    // 移动端适配
+    mobileAdaptive: {
+      type: Boolean,
+      default: true
+    },
+
+    // 移动端缩放比例
+    mobileScale: {
+      type: Number,
+      default: 0.8,
+      validator: (value) => {
+        return value > 0 && value <= 1;
+      }
     }
   },
 
@@ -225,7 +249,9 @@ export default {
     return {
       isHovered: false,
       imageLoaded: false,
-      imageError: false
+      imageError: false,
+      isMobile: false,
+      windowWidth: 0
     };
   },
 
@@ -238,7 +264,7 @@ export default {
     },
 
     containerStyle() {
-      const size = this.getPixelValue(this.avatarSize);
+      const size = this.getAdjustedSize(this.avatarSize);
       return {
         width: size,
         height: size
@@ -247,11 +273,13 @@ export default {
 
     avatarStyle() {
       const borderRadius = this.shape === 'circle' ? '50%' : '4px';
+      const borderWidth = this.getPixelValue(this.borderWidth);
+
       return {
         width: '100%',
         height: '100%',
         borderRadius,
-        border: `${this.getPixelValue(this.borderWidth)} solid ${this.borderColor}`,
+        border: `${borderWidth} solid ${this.borderColor}`,
         boxShadow: this.shadow ? '0 5px 15px rgba(0, 0, 0, 0.1)' : 'none',
         overflow: 'hidden'
       };
@@ -268,12 +296,33 @@ export default {
     },
 
     badgeStyle() {
+      const baseOffset = 5;
+      const adjustedOffset = this.isMobile && this.mobileAdaptive ?
+        baseOffset * this.mobileScale : baseOffset;
+
       const positions = {
-        'top-left': { top: '5px', left: '5px' },
-        'top-right': { top: '5px', right: '5px' },
-        'bottom-left': { bottom: '5px', left: '5px' },
-        'bottom-right': { bottom: '5px', right: '5px' }
+        'top-left': {
+          top: `${adjustedOffset}px`,
+          left: `${adjustedOffset}px`
+        },
+        'top-right': {
+          top: `${adjustedOffset}px`,
+          right: `${adjustedOffset}px`
+        },
+        'bottom-left': {
+          bottom: `${adjustedOffset}px`,
+          left: `${adjustedOffset}px`
+        },
+        'bottom-right': {
+          bottom: `${adjustedOffset}px`,
+          right: `${adjustedOffset}px`
+        }
       };
+
+      // 调整徽章大小
+      const adjustedBadgeSize = this.getAdjustedSize(this.badgeSize);
+      const adjustedBorderWidth = this.badgeBorder ?
+        this.getPixelValue(this.badgeBorderWidth) : '0';
 
       // 如果使用自定义颜色，则通过内联样式设置
       const customStyle = this.badgeType === 'custom' ? {
@@ -281,12 +330,35 @@ export default {
       } : {};
 
       return {
-        width: this.getPixelValue(this.badgeSize),
-        height: this.getPixelValue(this.badgeSize),
-        border: this.badgeBorder ? `${this.getPixelValue(this.badgeBorderWidth)} solid ${this.badgeBorderColor}` : 'none',
+        width: adjustedBadgeSize,
+        height: adjustedBadgeSize,
+        border: this.badgeBorder ?
+          `${adjustedBorderWidth} solid ${this.badgeBorderColor}` : 'none',
         ...positions[this.badgePosition],
         ...customStyle
       };
+    },
+
+    // 图标样式 - 根据徽章大小自适应
+    iconStyle() {
+      const badgeSizeNum = this.getNumberValue(this.badgeSize);
+      const adjustedBadgeSize = badgeSizeNum * (this.isMobile && this.mobileAdaptive ?
+        this.mobileScale : 1);
+      const iconSize = adjustedBadgeSize * this.iconScale;
+
+      if (this.badgeIconType === 'image') {
+        // 图片图标
+        return {
+          width: `${iconSize}px`,
+          height: `${iconSize}px`
+        };
+      } else {
+        // 文本或字体图标
+        return {
+          fontSize: `${iconSize}px`,
+          lineHeight: `${iconSize}px`
+        };
+      }
     },
 
     // 处理本地图片路径
@@ -318,6 +390,14 @@ export default {
     if (this.avatarType !== 'image' || this.avatarComponent) {
       this.imageLoaded = true;
     }
+
+    // 检测移动端
+    this.checkIfMobile();
+    window.addEventListener('resize', this.handleResize);
+  },
+
+  beforeDestroy() {
+    window.removeEventListener('resize', this.handleResize);
   },
 
   methods: {
@@ -331,6 +411,36 @@ export default {
       }
 
       return `${value}px`;
+    },
+
+    getNumberValue(value) {
+      if (typeof value === 'number') {
+        return value;
+      }
+
+      // 提取数字部分
+      const num = parseInt(value, 10);
+      return isNaN(num) ? 32 : num;
+    },
+
+    // 获取调整后的尺寸（考虑移动端适配）
+    getAdjustedSize(value) {
+      const numValue = this.getNumberValue(value);
+      const adjustedValue = this.isMobile && this.mobileAdaptive ?
+        numValue * this.mobileScale : numValue;
+
+      return this.getPixelValue(adjustedValue);
+    },
+
+    // 检查是否为移动端
+    checkIfMobile() {
+      this.windowWidth = window.innerWidth;
+      this.isMobile = this.windowWidth <= 768;
+    },
+
+    // 处理窗口大小变化
+    handleResize() {
+      this.checkIfMobile();
     },
 
     handleMouseEnter() {
@@ -365,22 +475,29 @@ export default {
 <style scoped>
 .verified-avatar-wrapper {
   display: inline-block;
+  position: relative;
 }
 
 .avatar-container {
   position: relative;
   display: inline-block;
+  width: 100%;
+  height: 100%;
 }
 
 .avatar-content {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
   transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
 .avatar-image {
   object-fit: cover;
+  width: 100%;
+  height: 100%;
 }
 
 .avatar-text {
@@ -388,10 +505,17 @@ export default {
   color: white;
   font-weight: bold;
   font-size: calc(100% - 10px);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .avatar-custom {
   /* 自定义内容样式 */
+  width: 100%;
+  height: 100%;
 }
 
 .avatar-hover-effect:hover {
@@ -417,20 +541,28 @@ export default {
 
 .badge-icon-text {
   color: white;
-  font-size: calc(100% - 4px);
   font-weight: bold;
   user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .badge-icon-font {
   color: white;
-  font-size: calc(100% - 4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .badge-icon-image {
-  width: 70%;
-  height: 70%;
   object-fit: contain;
+  width: 100%;
+  height: 100%;
 }
 
 /* 徽章边框样式 */
@@ -649,19 +781,61 @@ export default {
   animation-duration: 1.5s;
 }
 
-/* 响应式设计 */
+/* 响应式设计 - 移动端适配 */
 @media (max-width: 768px) {
+  .verified-avatar-wrapper {
+    transform: scale(0.9);
+    transform-origin: center;
+  }
+
+  .avatar-container {
+    max-width: 100%;
+  }
+
   .verified-badge {
-    width: 24px !important;
-    height: 24px !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   }
 
-  .badge-icon-text {
-    font-size: 12px;
+  .badge-tooltip {
+    font-size: 11px;
+    padding: 4px 8px;
   }
 
-  .badge-icon-font {
-    font-size: 12px;
+  /* 减少移动端动画强度 */
+  .pulse {
+    animation-duration: 2.5s;
+  }
+
+  .bounce {
+    animation-duration: 2s;
+  }
+
+  .rotate {
+    animation-duration: 4s;
+  }
+
+  .color-change {
+    animation-duration: 5s;
+  }
+}
+
+/* 小屏幕手机适配 */
+@media (max-width: 480px) {
+  .verified-avatar-wrapper {
+    transform: scale(0.85);
+  }
+
+  .avatar-hover-effect:hover {
+    transform: scale(1.03);
+  }
+
+  .verified-badge:hover {
+    transform: scale(1.05);
+  }
+
+  .badge-tooltip {
+    display: none;
+    /* 在小屏幕上隐藏工具提示 */
   }
 }
 
@@ -682,6 +856,26 @@ export default {
   .loading-spinner {
     animation: none;
     border-top-color: #f3f3f3;
+  }
+}
+
+/* 高DPI屏幕优化 */
+@media (-webkit-min-device-pixel-ratio: 2),
+(min-resolution: 192dpi) {
+  .verified-badge {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  .avatar-image {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* 横屏模式优化 */
+@media (max-width: 768px) and (orientation: landscape) {
+  .verified-avatar-wrapper {
+    transform: scale(0.95);
   }
 }
 </style>
