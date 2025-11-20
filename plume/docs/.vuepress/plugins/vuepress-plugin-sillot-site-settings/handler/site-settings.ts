@@ -1,14 +1,16 @@
 // handler/site-settings.ts
 
-import { readonly, ref, type Ref } from "vue";
+import { readonly, type Ref, ref } from "vue";
 import type {
+  CedossantItem,
   CedossMap,
+  EncryptableField,
   EncryptedCedoss,
   EncryptedCedossantItem,
 } from "../../vuepress-plugin-sillot-cedoss/stores/useCedoss";
 
 /**
- * 严格的加密意码数据验证
+ * 严格的加密意码数据验证（适配新格式）
  */
 export const isValidEncryptedCedoss = (data: any): data is EncryptedCedoss => {
   if (!data || typeof data !== "object") return false;
@@ -16,10 +18,24 @@ export const isValidEncryptedCedoss = (data: any): data is EncryptedCedoss => {
   for (const key in data) {
     const item = data[key];
 
-    // 每个项必须符合 EncryptedCedossantItem 接口
+    // 每个项必须符合新的 EncryptedCedossantItem 接口
     if (!item || typeof item !== "object") return false;
-    if (typeof item.value !== "string") return false;
     if (item.encrypted !== true) return false;
+
+    // 新格式验证：必须包含 encryptedData 对象
+    if (!item.encryptedData || typeof item.encryptedData !== "object") {
+      return false;
+    }
+
+    // 必须包含加密字段列表
+    if (!Array.isArray(item.encryptedFields)) return false;
+
+    // 必需的基础字段
+    if (typeof item.code !== "string") return false;
+    if (!["原码组", "转码组", "引码组"].includes(item.group)) return false;
+    if (typeof item.prefixUsage !== "boolean") return false;
+    if (typeof item.standaloneUsage !== "boolean") return false;
+    if (typeof item.suffixUsage !== "boolean") return false;
 
     // 可选算法字段检查
     if (item.algorithm && typeof item.algorithm !== "string") return false;
@@ -54,11 +70,15 @@ export const simpleXorCrypt = (str: string, key: string): string => {
   return result;
 };
 
-// 类型守卫函数，检查是否为加密数据项
+// 类型守卫函数，检查是否为加密数据项（适配新格式）
 export const isEncryptedCedossantItem = (
   value: any,
 ): value is EncryptedCedossantItem => {
-  return value && typeof value === "object" && "value" in value;
+  return value &&
+    typeof value === "object" &&
+    value.encrypted === true &&
+    value.encryptedData &&
+    Array.isArray(value.encryptedFields);
 };
 
 /**
@@ -77,7 +97,6 @@ export const generateRandomKey = (
   }
 
   if (minLength > maxLength) {
-    // 交换最小和最大值
     [minLength, maxLength] = [maxLength, minLength];
   }
 
@@ -110,18 +129,169 @@ export const validateKey = (
   if (typeof key !== "string") return false;
   if (key.length < minLength || key.length > maxLength) return false;
 
-  // 可选：添加字符集验证
   const validChars = /^[A-Za-z0-9!@#$%^&*]+$/;
   return validChars.test(key);
 };
 
+/**
+ * 创建默认的意码项（适配新格式）
+ */
+export const createDefaultCedossantItem = (
+  code: string,
+  standardCode: string,
+): CedossantItem => {
+  const timestamp = new Date().toISOString();
+  return {
+    standardCode,
+    code,
+    group: "原码组",
+    liaisonSpelling: code.toLowerCase().replace(/[^a-z]/g, ""),
+    pinyin: "",
+    prefixUsage: false,
+    standaloneUsage: true,
+    suffixUsage: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+};
 
 /**
- * 加密映射数据的核心逻辑
- * @param mappingData 原始映射数据
- * @param encryptionKey 加密密钥
- * @param previewLength 预览文本长度（默认15）
- * @returns 加密后的数据和预览项
+ * 加密单个字段的值
+ */
+export const encryptFieldValue = (
+  value: string | undefined,
+  key: string,
+): string | undefined => {
+  if (!value) return undefined;
+  return simpleXorCrypt(value, key);
+};
+
+/**
+ * 解密单个字段的值
+ */
+export const decryptFieldValue = (
+  value: string | undefined,
+  key: string,
+): string | undefined => {
+  if (!value) return undefined;
+  return simpleXorCrypt(value, key);
+};
+
+/**
+ * 加密意码项为新的字段级加密格式
+ */
+export const encryptCedossantItem = (
+  item: CedossantItem,
+  encryptionKey: string,
+): EncryptedCedossantItem => {
+  const encryptedData: EncryptedCedossantItem["encryptedData"] = {};
+  const encryptedFields: EncryptableField[] = [];
+
+  // 需要加密的字段列表
+  const encryptableFields: EncryptableField[] = [
+    "standardCode",
+    "ancientStandardCode",
+    "simplifiedStandardCode",
+    "affix",
+    "relatedWords",
+    "liaisonSpelling",
+    "pinyin",
+    "chineseMeaning",
+    "tableAttribute",
+  ];
+
+  // 加密需要加密的字段
+  encryptableFields.forEach((field) => {
+    const value = (item as any)[field];
+    if (value !== undefined && value !== null && value !== "") {
+      const encryptedValue = encryptFieldValue(String(value), encryptionKey);
+      if (encryptedValue) {
+        encryptedData[field] = encryptedValue;
+        encryptedFields.push(field);
+      }
+    }
+  });
+
+  // 构建加密后的意码项
+  return {
+    // 不加密的字段直接复制
+    code: item.code,
+    group: item.group,
+    prefixUsage: item.prefixUsage,
+    standaloneUsage: item.standaloneUsage,
+    suffixUsage: item.suffixUsage,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+
+    // 可选的不加密字段
+    symbolicCode: item.symbolicCode,
+    ancientCode: item.ancientCode,
+    simplifiedCode: item.simplifiedCode,
+    simplifiedAncientCode: item.simplifiedAncientCode,
+    description: item.description,
+
+    // 加密的数据
+    encryptedData,
+
+    // 加密元数据
+    encrypted: true,
+    algorithm: "xor",
+    version: "2.0",
+    encryptedFields,
+  };
+};
+
+/**
+ * 解密密意码项（新格式）
+ */
+export const decryptCedossantItem = (
+  encryptedItem: EncryptedCedossantItem,
+  decryptionKey: string,
+): CedossantItem => {
+  const decryptedItem: CedossantItem = {
+    // 复制不加密的字段
+    code: encryptedItem.code,
+    group: encryptedItem.group,
+    prefixUsage: encryptedItem.prefixUsage,
+    standaloneUsage: encryptedItem.standaloneUsage,
+    suffixUsage: encryptedItem.suffixUsage,
+    createdAt: encryptedItem.createdAt,
+    updatedAt: encryptedItem.updatedAt,
+
+    // 可选的不加密字段
+    symbolicCode: encryptedItem.symbolicCode,
+    ancientCode: encryptedItem.ancientCode,
+    simplifiedCode: encryptedItem.simplifiedCode,
+    simplifiedAncientCode: encryptedItem.simplifiedAncientCode,
+    description: encryptedItem.description,
+
+    // 初始化需要加密的字段
+    standardCode: "",
+    liaisonSpelling: "",
+    pinyin: "",
+  };
+
+  // 解密加密的字段
+  encryptedItem.encryptedFields.forEach((field) => {
+    const encryptedValue = encryptedItem.encryptedData[field];
+    if (encryptedValue) {
+      try {
+        const decryptedValue = decryptFieldValue(encryptedValue, decryptionKey);
+        if (decryptedValue) {
+          (decryptedItem as any)[field] = decryptedValue;
+        }
+      } catch (error) {
+        console.warn(`解密字段 ${field} 失败:`, error);
+        throw new Error(`字段 ${field} 解密失败`);
+      }
+    }
+  });
+
+  return decryptedItem;
+};
+
+/**
+ * 加密映射数据的核心逻辑（适配新格式）
  */
 export const encryptMappingData = (
   mappingData: CedossMap,
@@ -132,25 +302,30 @@ export const encryptMappingData = (
   previewItems: Array<{ key: string; original: string; encrypted: string }>;
 } => {
   const encryptedData: EncryptedCedoss = {};
-  const previewItems: Array<{ key: string; original: string; encrypted: string }> = [];
+  const previewItems: Array<
+    { key: string; original: string; encrypted: string }
+  > = [];
 
   for (const [key, value] of Object.entries(mappingData)) {
     if (typeof value === "string") {
-      const encryptedValue = simpleXorCrypt(value, encryptionKey);
-      // 使用新格式
-      encryptedData[key] = {
-        value: encryptedValue,
-        encrypted: true,
-        algorithm: "xor",
-      };
+      // 创建完整的意码项
+      const cedossantItem = createDefaultCedossantItem(key, value);
+
+      // 使用新格式加密
+      const encryptedItem = encryptCedossantItem(cedossantItem, encryptionKey);
+      encryptedData[key] = encryptedItem;
+
+      // 创建预览项（只显示标码的加密）
+      const encryptedStandardCode = encryptedItem.encryptedData.standardCode ||
+        "";
       previewItems.push({
         key,
         original: value.length > previewLength
           ? value.substring(0, previewLength) + "..."
           : value,
-        encrypted: encryptedValue.length > previewLength
-          ? encryptedValue.substring(0, previewLength) + "..."
-          : encryptedValue,
+        encrypted: encryptedStandardCode.length > previewLength
+          ? encryptedStandardCode.substring(0, previewLength) + "..."
+          : encryptedStandardCode,
       });
     }
   }
@@ -160,8 +335,6 @@ export const encryptMappingData = (
 
 /**
  * 下载加密文件的通用逻辑
- * @param encryptedData 加密后的数据
- * @param filename 文件名（不包含日期部分）
  */
 export const downloadEncryptedFile = (
   encryptedData: EncryptedCedoss,
@@ -181,11 +354,7 @@ export const downloadEncryptedFile = (
 };
 
 /**
- * 处理文件上传的通用逻辑
- * @param file 上传的文件
- * @param encryptionKey 加密密钥（用于加密操作）
- * @param operationType 操作类型：'encrypt' | 'import'
- * @returns 操作结果
+ * 处理文件上传的通用逻辑（适配新格式）
  */
 export const handleFileUpload = async (
   file: File,
@@ -206,8 +375,33 @@ export const handleFileUpload = async (
         throw new Error("请先设置加密密钥");
       }
 
+      // 验证数据格式
+      if (typeof fileData !== "object" || fileData === null) {
+        throw new Error("文件格式错误：必须是JSON对象");
+      }
+
+      // 检查是否是旧格式（简单键值对）
+      const firstValue = Object.values(fileData)[0];
+      const isLegacyFormat = typeof firstValue === "string";
+
+      let cedossMap: CedossMap = {};
+
+      if (isLegacyFormat) {
+        // 旧格式：直接使用
+        cedossMap = fileData;
+      } else {
+        // 新格式：提取标码字段
+        cedossMap = {};
+        Object.keys(fileData).forEach((key) => {
+          const item = fileData[key];
+          if (item && typeof item === "object" && item.standardCode) {
+            cedossMap[key] = item.standardCode;
+          }
+        });
+      }
+
       const { encryptedData, previewItems } = encryptMappingData(
-        fileData,
+        cedossMap,
         encryptionKey,
       );
 
@@ -233,6 +427,27 @@ export const handleFileUpload = async (
       error: error instanceof Error ? error.message : "未知错误",
     };
   }
+};
+
+/**
+ * 验证解密后的值是否有效
+ */
+export const isValidDecryptedValue = (value: string): boolean => {
+  if (!value || typeof value !== "string") return false;
+
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(value.replace(/[\n\t]/g, ""))) {
+    return false;
+  }
+
+  if (value.includes("�") || value.includes("��")) {
+    return false;
+  }
+
+  if (value.length > 10000) {
+    return false;
+  }
+
+  return true;
 };
 
 /**
@@ -277,9 +492,9 @@ export const useLayoutSettings = () => {
 
   const updateBodyClass = (): void => {
     if (compactLayoutEnabled.value) {
-      document.body.classList.remove("compact-layout");
-    } else {
       document.body.classList.add("compact-layout");
+    } else {
+      document.body.classList.remove("compact-layout");
     }
   };
 
@@ -305,7 +520,7 @@ export const useLayoutSettings = () => {
   };
 
   return {
-    compactLayoutEnabled,
+    compactLayoutEnabled: readonly(compactLayoutEnabled),
     updateBodyClass,
     saveLayoutSetting,
     loadLayoutSetting,
@@ -319,16 +534,22 @@ export const useLayoutSettings = () => {
 export const useEncryptionKey = (initialKey: string = "") => {
   const encryptionKey = ref(initialKey);
 
-  const generateKey = (minLength: number = 13, maxLength: number = 13): void => {
+  const generateKey = (
+    minLength: number = 13,
+    maxLength: number = 13,
+  ): void => {
     encryptionKey.value = generateRandomKey(minLength, maxLength);
   };
 
-  const validateCurrentKey = (minLength: number = 1, maxLength: number = 100): boolean => {
+  const validateCurrentKey = (
+    minLength: number = 1,
+    maxLength: number = 100,
+  ): boolean => {
     return validateKey(encryptionKey.value, minLength, maxLength);
   };
 
   return {
-    encryptionKey,
+    encryptionKey: encryptionKey,
     generateKey,
     validateCurrentKey,
   };
@@ -340,3 +561,47 @@ export interface PreviewItem {
   original: string;
   encrypted: string;
 }
+
+/**
+ * 获取加密字段统计信息
+ */
+export const getEncryptionStats = (encryptedData: EncryptedCedoss) => {
+  let totalFields = 0;
+  let encryptedFields = 0;
+
+  Object.values(encryptedData).forEach((item) => {
+    totalFields += 9; // 固定的9个可加密字段
+    encryptedFields += item.encryptedFields.length;
+  });
+
+  return {
+    totalFields,
+    encryptedFields,
+    encryptionRatio: totalFields > 0 ? encryptedFields / totalFields : 0,
+  };
+};
+
+/**
+ * 验证意码项格式
+ */
+export const validateCedossantItem = (item: any): item is CedossantItem => {
+  if (!item || typeof item !== "object") return false;
+
+  // 必需字段验证
+  if (typeof item.standardCode !== "string" || !item.standardCode) return false;
+  if (typeof item.code !== "string" || !item.code) return false;
+  if (!["原码组", "转码组", "引码组"].includes(item.group)) return false;
+  if (typeof item.liaisonSpelling !== "string") return false;
+  if (typeof item.pinyin !== "string") return false;
+  if (typeof item.prefixUsage !== "boolean") return false;
+  if (typeof item.standaloneUsage !== "boolean") return false;
+  if (typeof item.suffixUsage !== "boolean") return false;
+
+  // 验证联拼格式
+  if (!/^[a-z]*$/.test(item.liaisonSpelling)) return false;
+
+  return true;
+};
+
+// 导出类型
+export type { EncryptableField };

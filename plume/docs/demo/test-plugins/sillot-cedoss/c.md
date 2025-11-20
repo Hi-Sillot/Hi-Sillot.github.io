@@ -15,5 +15,10 @@ permalink: /demo/fjoaykji/
 <!-- 最紧凑模式 - 仅图标 -->
 <C id="invalid_id" error-mode="icon" />
 
+<C id="completeExample_yobeCe" />
 
-打开 <VSCodeSettingsLink id="workbench.localHistory.enabled" /> 试试
+<C id="minimalExample_doCe" />
+
+<C id="ancientExample_yobeCe" />
+
+<C id="complexExample_doCe" />
