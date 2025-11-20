@@ -139,7 +139,7 @@ import {
   ChartIcon,
   ViewListIcon
 } from 'tdesign-icons-vue-next';
-import { useCedossStore } from '../../vuepress-plugin-sillot-inline/stores/useCedoss';
+import { useCedossStore } from '../../vuepress-plugin-sillot-cedoss/stores/useCedoss';
 import { generateRandomKey, isValidEncryptedCedoss, readFileAsText, simpleXorCrypt } from '../handler/site-settings';
 
 

@@ -162,7 +162,7 @@ import {
   ErrorCircleFilledIcon,
   HelpCircleIcon
 } from 'tdesign-icons-vue-next';
-import { CedossMap, EncryptedCedossantItem, EncryptedCedoss, useCedossStore } from '../../vuepress-plugin-sillot-inline/stores/useCedoss';
+import { CedossMap, EncryptedCedossantItem, EncryptedCedoss, useCedossStore } from '../../vuepress-plugin-sillot-cedoss/stores/useCedoss';
 import { generateRandomKey, isValidEncryptedCedoss, readFileAsText, simpleXorCrypt } from '../handler/site-settings';
 
 // 消息提示

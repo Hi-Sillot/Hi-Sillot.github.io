@@ -11,54 +11,54 @@ Naive UI 的二维码、跑马灯组件存在问题（跑马灯移动端正常�
 :::: collapse
 - Naive UI + TDesign 统一切换深色模式
 
-::: code-tree title="同步深色模式" height="580px" entry=".vuepress/layouts/Layout.vue"
+  ::: code-tree title="同步深色模式" height="580px" entry=".vuepress/layouts/Layout.vue"
 
-```vue title=".vuepress/layouts/Layout.vue"
-<script lang="ts" setup>
-import { computed, onMounted, watch } from "vue";
-import { Layout } from 'vuepress-theme-plume/client'
-// https://theme-plume.vuejs.press/guide/api/client/#usedarkmode
-import { useDarkMode } from "vuepress-theme-plume/composables";
-// <n-config-provider :theme="isDark ? darkTheme : lightTheme"> 包裹 vuepress-theme-plume/client 的 <Layout>
-import { darkTheme, lightTheme } from 'naive-ui'
-const isDark = useDarkMode();
-const updateDarkMode = () => {
-  if (isDark.value) {
-    // 设置TDesign深色模式
-    document.documentElement.setAttribute("theme-mode", "dark");
-  } else {
-    // 重置TDesign为浅色模式
-    document.documentElement.removeAttribute("theme-mode");
-  }
-};
-watch(isDark, (newValue) => {
-  updateDarkMode();
-});
-onMounted(() => {
-  updateDarkMode();
-});
-</script>
+  ```vue title=".vuepress/layouts/Layout.vue"
+  <script lang="ts" setup>
+  import { computed, onMounted, watch } from "vue";
+  import { Layout } from 'vuepress-theme-plume/client'
+  // https://theme-plume.vuejs.press/guide/api/client/#usedarkmode
+  import { useDarkMode } from "vuepress-theme-plume/composables";
+  // <n-config-provider :theme="isDark ? darkTheme : lightTheme"> 包裹 vuepress-theme-plume/client 的 <Layout>
+  import { darkTheme, lightTheme } from 'naive-ui'
+  const isDark = useDarkMode();
+  const updateDarkMode = () => {
+    if (isDark.value) {
+      // 设置TDesign深色模式
+      document.documentElement.setAttribute("theme-mode", "dark");
+    } else {
+      // 重置TDesign为浅色模式
+      document.documentElement.removeAttribute("theme-mode");
+    }
+  };
+  watch(isDark, (newValue) => {
+    updateDarkMode();
+  });
+  onMounted(() => {
+    updateDarkMode();
+  });
+  </script>
 
-<template>
-  <n-config-provider :theme="isDark ? darkTheme : lightTheme">
-    <Layout>
-    </Layout>
-  </n-config-provider>
-</template>
-```
+  <template>
+    <n-config-provider :theme="isDark ? darkTheme : lightTheme">
+      <Layout>
+      </Layout>
+    </n-config-provider>
+  </template>
+  ```
 
-```ts title=".vuepress/client.ts"
-import Layout from "./layouts/Layout.vue"; // [!code warning]
-export default defineClientConfig({
-  setup() {
-  },
-  layouts: {
-    Layout, // [!code warning] 默认布局
-  },
-});
-```
+  ```ts title=".vuepress/client.ts"
+  import Layout from "./layouts/Layout.vue"; // [!code warning]
+  export default defineClientConfig({
+    setup() {
+    },
+    layouts: {
+      Layout, // [!code warning] 默认布局
+    },
+  });
+  ```
 
-:::
+  :::
 
 ::::
 

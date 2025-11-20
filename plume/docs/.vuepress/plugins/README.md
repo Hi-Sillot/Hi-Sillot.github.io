@@ -20,6 +20,10 @@
 
 行内组件
 
+## vuepress-plugin-sillot-cedoss
+
+意码插件
+
 ## vuepress-plugin-sillot-site-settings
 
 提供一个菜单调整站点的布局等设置
