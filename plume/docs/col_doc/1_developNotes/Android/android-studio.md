@@ -30,6 +30,12 @@ permalink: /develop_notes/uqo187ed/
 
 进度条美化
 
+[Develocity](https://plugins.jetbrains.com/plugin/27471-develocity)
+
+Gradle消耗内存可视化
+
+![可能需要设置版本为 4.2.2](./Develocity.webp)
+
 ## 调试
 
-调试汐洛安卓要求至少32GB内存。
+调试汐洛KMP要求至少32GB内存。

@@ -44,6 +44,7 @@ export default (): Plugin => ({
 
 /**
  * 创建 Pagefind 过滤器 HTML
+ * TODO: 过滤器没研究明白，有空再探索吧 https://pagefind.app/docs/filtering/
  */
 function createPagefindFilters(frontmatter: Record<string, any>): string {
   const filters: string[] = [];
