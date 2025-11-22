@@ -1,14 +1,17 @@
 // composables/useScreenSize.ts - 屏幕尺寸管理
 
-import { ref, onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { BREAKPOINTS, EVENT_NAMES } from "../../constants";
 import type { ScreenState } from "../../types/localRelationship";
 
-let TAG = "useScreenSize.ts"
+let TAG = "useScreenSize.ts";
 // 日志计数器
 let logCounter = 0;
 function log(step: string, data?: any) {
-  console.log(`${TAG} ${++logCounter}. [useScreenSize] ${step}`, data ? data : '');
+  console.log(
+    `${TAG} ${++logCounter}. [useScreenSize] ${step}`,
+    data ? data : "",
+  );
 }
 
 /**
@@ -16,7 +19,7 @@ function log(step: string, data?: any) {
  */
 export function useScreenSize() {
   log("开始初始化 useScreenSize");
-  
+
   const screenState = ref<ScreenState>({
     isLargeScreen: false,
     containerWidth: 0,
@@ -31,13 +34,14 @@ export function useScreenSize() {
    */
   const updateScreenSize = (): void => {
     const wasLargeScreen = screenState.value.isLargeScreen;
-    screenState.value.isLargeScreen = window.matchMedia(`(min-width: ${BREAKPOINTS.LARGE_SCREEN}px)`).matches;
-    
+    screenState.value.isLargeScreen =
+      window.matchMedia(`(min-width: ${BREAKPOINTS.LARGE_SCREEN}px)`).matches;
+
     log("更新屏幕尺寸状态", {
       之前是大屏幕: wasLargeScreen,
       现在是大屏幕: screenState.value.isLargeScreen,
       窗口宽度: window.innerWidth,
-      断点: BREAKPOINTS.LARGE_SCREEN
+      断点: BREAKPOINTS.LARGE_SCREEN,
     });
 
     // 如果是大屏幕，自动展开
@@ -45,7 +49,7 @@ export function useScreenSize() {
       screenState.value.isExpanded = true;
       log("大屏幕自动展开");
     }
-    
+
     // 如果是小屏幕且当前是展开状态，但应该收起
     if (!screenState.value.isLargeScreen && screenState.value.isExpanded) {
       // 这里可以根据需要决定是否自动收起
@@ -57,15 +61,15 @@ export function useScreenSize() {
    * 更新容器宽度
    */
   const updateContainerWidth = (): void => {
-    const container = document.querySelector('.relationship-map__container');
+    const container = document.querySelector(".relationship-map__container");
     if (container) {
       const oldWidth = screenState.value.containerWidth;
       screenState.value.containerWidth = container.clientWidth;
-      
+
       if (oldWidth !== screenState.value.containerWidth) {
         log("容器宽度更新", {
           旧宽度: oldWidth,
-          新宽度: screenState.value.containerWidth
+          新宽度: screenState.value.containerWidth,
         });
       }
     }
@@ -77,11 +81,11 @@ export function useScreenSize() {
   const toggleExpand = (): void => {
     const oldState = screenState.value.isExpanded;
     screenState.value.isExpanded = !screenState.value.isExpanded;
-    
+
     log("切换展开状态", {
       之前状态: oldState,
       新状态: screenState.value.isExpanded,
-      是否大屏幕: screenState.value.isLargeScreen
+      是否大屏幕: screenState.value.isLargeScreen,
     });
 
     // 更新容器宽度
@@ -93,7 +97,9 @@ export function useScreenSize() {
    */
   const setupMediaQueryListener = (): void => {
     try {
-      mediaQuery = window.matchMedia(`(min-width: ${BREAKPOINTS.LARGE_SCREEN}px)`);
+      mediaQuery = window.matchMedia(
+        `(min-width: ${BREAKPOINTS.LARGE_SCREEN}px)`,
+      );
       mediaQuery.addEventListener(EVENT_NAMES.CHANGE, updateScreenSize);
       log("媒体查询监听器设置完成");
     } catch (error) {
@@ -108,23 +114,25 @@ export function useScreenSize() {
     try {
       resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          if (entry.target.classList.contains('relationship-map__container')) {
+          if (entry.target.classList.contains("relationship-map__container")) {
             updateContainerWidth();
           }
         }
       });
 
       // 监听容器尺寸变化
-      const container = document.querySelector('.relationship-map__container');
+      const container = document.querySelector(".relationship-map__container");
       if (container) {
         resizeObserver.observe(container);
         log("容器尺寸监听器设置完成");
       } else {
         console.warn("未找到关系图谱容器，无法监听尺寸变化");
-        
+
         // 延迟重试
         setTimeout(() => {
-          const retryContainer = document.querySelector('.relationship-map__container');
+          const retryContainer = document.querySelector(
+            ".relationship-map__container",
+          );
           if (retryContainer && resizeObserver) {
             resizeObserver.observe(retryContainer);
             log("延迟重试: 容器尺寸监听器设置完成");
@@ -166,27 +174,27 @@ export function useScreenSize() {
 
   onMounted(() => {
     log("useScreenSize onMounted 开始");
-    
+
     try {
       // 初始更新
       updateScreenSize();
       updateContainerWidth();
-      
+
       // 设置监听器
       setupMediaQueryListener();
-      
+
       // 延迟设置容器监听，确保DOM已渲染
       setTimeout(() => {
         setupContainerObserver();
       }, 100);
-      
+
       // 添加窗口大小变化监听
-      window.addEventListener('resize', updateScreenSize);
-      
+      window.addEventListener("resize", updateScreenSize);
+
       log("useScreenSize onMounted 完成", {
         是否大屏幕: screenState.value.isLargeScreen,
         容器宽度: screenState.value.containerWidth,
-        是否展开: screenState.value.isExpanded
+        是否展开: screenState.value.isExpanded,
       });
     } catch (error) {
       console.error("useScreenSize onMounted 执行失败:", error);
@@ -195,22 +203,14 @@ export function useScreenSize() {
 
   onUnmounted(() => {
     log("useScreenSize onUnmounted 开始");
-    
+
     try {
       cleanupMediaQueryListener();
       cleanupContainerObserver();
-      window.removeEventListener('resize', updateScreenSize);
+      window.removeEventListener("resize", updateScreenSize);
       log("useScreenSize onUnmounted 完成");
     } catch (error) {
       console.error("useScreenSize onUnmounted 执行失败:", error);
-    }
-  });
-
-  log("useScreenSize 初始化完成", {
-    初始状态: {
-      是否大屏幕: screenState.value.isLargeScreen,
-      容器宽度: screenState.value.containerWidth,
-      是否展开: screenState.value.isExpanded
     }
   });
 

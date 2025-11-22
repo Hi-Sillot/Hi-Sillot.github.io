@@ -2,6 +2,7 @@ export interface AuthorInfo {
   name: string
   slug: string
   avatar?: string
+  verified?: boolean
 }
 
 export interface AuthorConfig extends AuthorInfo {

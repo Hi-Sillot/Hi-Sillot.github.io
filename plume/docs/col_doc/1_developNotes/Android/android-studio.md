@@ -10,6 +10,8 @@ permalink: /develop_notes/uqo187ed/
 
 <LinkCard icon="twemoji:astonished-face" title="海文东官方维护的安卓 webview 升级包" href="https://github.com/Hi-Windom/android-webview" />
 
+[Android Gradle 插件和 Android Studio 兼容性](https://developer.android.com/studio/releases?hl=zh-cn#android_gradle_plugin_and_android_studio_compatibility)
+
 ## 插件
 
 [ADB Wi-Fi](https://plugins.jetbrains.com/plugin/14969-adb-wi-fi)

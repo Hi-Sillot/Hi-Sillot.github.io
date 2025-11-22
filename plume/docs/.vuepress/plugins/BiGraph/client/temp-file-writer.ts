@@ -16,21 +16,20 @@ export class TempFileWriter {
    * VuePress 开发和构建过程中都会加载临时文件
    */
   public static async writeTempFile(app: App): Promise<void> {
-    debug.log(TAG, '开始写入项目文件', {
+    debug.log(TAG, "开始写入项目文件", {
       appTempDir: app.dir.temp(),
-      appDestDir: app.dir.dest()
+      appDestDir: app.dir.dest(),
     });
 
     try {
-let fileName = path.join(app.dir.temp(), `${TEMP_FILE_NAMES.BIO_TS}.js`)
+      let fileName = path.join(app.dir.temp(), `${TEMP_FILE_NAMES.BIO_TS}.js`);
       const content = this.generateBioFileContent(app.pages);
       await app.writeTemp(fileName, content);
-      debug.log(TAG, '临时文件写入成功', { 
-        tempPath: fileName
+      debug.log(TAG, "临时文件写入成功", {
+        tempPath: fileName,
       });
-      
     } catch (error) {
-      debug.error(TAG, '写入项目文件失败', error);
+      debug.error(TAG, "写入项目文件失败", error);
       throw error;
     }
   }
@@ -39,7 +38,7 @@ let fileName = path.join(app.dir.temp(), `${TEMP_FILE_NAMES.BIO_TS}.js`)
    * 生成临时文件内容 - 增强版本
    */
   private static generateBioFileContent(pages: any[]): string {
-    debug.log(TAG, '生成临时文件内容', { 
+    debug.log(TAG, "生成临时文件内容", {
       页面数: pages.length,
       // 示例页面: pages.slice(0, 3).map(p => ({
       //   path: p.path,
@@ -50,21 +49,21 @@ let fileName = path.join(app.dir.temp(), `${TEMP_FILE_NAMES.BIO_TS}.js`)
     });
 
     // 过滤有效页面（有 permalink 的页面）
-    const validPages = pages.filter(page => 
-      page.permalink && typeof page.permalink === 'string'
+    const validPages = pages.filter((page) =>
+      page.permalink && typeof page.permalink === "string"
     );
 
-    const pagesData = validPages.map(page => ({
+    const pagesData = validPages.map((page) => ({
       path: page.path,
-      title: page.title || '未命名',
+      title: page.title || "未命名",
       filePathRelative: page.filePathRelative,
       htmlFilePathRelative: page.htmlFilePathRelative,
       permalink: page.permalink,
       links: (page.links || []).map((link: any) => ({
         raw: link.raw,
         absolute: link.absolute,
-        relative: link.relative
-      }))
+        relative: link.relative,
+      })),
     }));
 
     return `// 自动生成的双链图谱数据文件
@@ -87,8 +86,12 @@ export const getValidPageCount = () => validPageCount;
 export const stats = {
   totalPages: ${pages.length},
   validPages: ${validPages.length},
-  totalLinks: ${pages.reduce((sum, page) => sum + (page.links?.length || 0), 0)},
-  pagesWithLinks: ${pages.filter(page => page.links && page.links.length > 0).length}
+  totalLinks: ${
+      pages.reduce((sum, page) => sum + (page.links?.length || 0), 0)
+    },
+  pagesWithLinks: ${
+      pages.filter((page) => page.links && page.links.length > 0).length
+    }
 };
 
 console.log('BiGraph: 数据文件加载完成', {
@@ -118,17 +121,17 @@ export default {
   public static async checkTempFileExists(app: App): Promise<boolean> {
     try {
       // 检查项目根目录的临时文件
-let fileName = path.join(app.dir.temp(), `${TEMP_FILE_NAMES.BIO_TS}.js`)
+      let fileName = path.join(app.dir.temp(), `${TEMP_FILE_NAMES.BIO_TS}.js`);
       const exists = await fs.pathExists(fileName);
-      
-      debug.log(TAG, '检查临时文件存在性', {
+
+      debug.log(TAG, "检查临时文件存在性", {
         path: fileName,
-        exists
+        exists,
       });
-      
+
       return exists;
     } catch (error) {
-      debug.error(TAG, '检查临时文件失败', error);
+      debug.error(TAG, "检查临时文件失败", error);
       return false;
     }
   }

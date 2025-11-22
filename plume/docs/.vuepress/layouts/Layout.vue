@@ -3,6 +3,8 @@
 import { computed, defineAsyncComponent, onMounted, watch } from "vue";
 import { Layout } from 'vuepress-theme-plume/client'
 import { isMobileDevice } from "../utils/env";
+import { useDeviceDetection } from "../plugins/vuepress-plugin-sillot-site-settings/composables/useDeviceDetection";
+import PageContextMenu from 'vuepress-theme-plume/features/PageContextMenu.vue'
 import Backlink from "../plugins/BiGraph/client/components/Backlink.vue";
 import LocalGraph from "../plugins/BiGraph/client/components/LocalGraphView.vue";
 import GlobalGraph from "../plugins/BiGraph/client/components/GlobalGraphView.vue";
@@ -13,7 +15,7 @@ import NSiteSettings from "../plugins/vuepress-plugin-sillot-site-settings/compo
 import { useDarkMode } from "vuepress-theme-plume/composables";
 // <n-config-provider :theme="isDark ? darkTheme : lightTheme"> 包裹 vuepress-theme-plume/client 的 <Layout>
 import { darkTheme, lightTheme } from 'naive-ui'
-import { useDeviceDetection } from "../plugins/vuepress-plugin-sillot-site-settings/composables/useDeviceDetection";
+import { ClientOnly } from "vuepress/client";
 const isDark = useDarkMode();
 const updateDarkMode = () => {
   if (isDark.value) {
@@ -60,10 +62,17 @@ const options = computed(() => {
           </ClientOnly>
         </template>
         <template #aside-outline-before>
-          <local-graph v-if="options.enableLocalGraph"></local-graph>
+          <ClientOnly>
+            <local-graph v-if="options.enableLocalGraph"></local-graph>
+          </ClientOnly>
         </template>
         <template #doc-meta-bottom>
           <AuthorLink></AuthorLink>
+        </template>
+        <template #doc-title-after>
+          <PageContextMenu>
+            <!-- Clipboard API不支持非安全上下文（HTTP），因此【复制此页】仅部署到 HTTPS 才生效，问题不大 -->
+          </PageContextMenu>
         </template>
       </Layout>
     </n-message-provider>

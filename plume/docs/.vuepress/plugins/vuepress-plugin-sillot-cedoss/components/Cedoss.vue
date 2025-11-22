@@ -3,7 +3,7 @@
     <a v-if="!unlink" :href="constLink" class="const-link" @click.prevent="handleLinkClick">
       {{ displayValue }}
     </a>
-    <span v-else>{{ displayValue }}</span>
+    <span v-else data-pagefind-filter="cedoss">{{ displayValue }}</span>
   </component>
 
   <component :is="tag" v-else class="const-error" :class="`const-error--${errorMode}`" :title="errorTooltip"

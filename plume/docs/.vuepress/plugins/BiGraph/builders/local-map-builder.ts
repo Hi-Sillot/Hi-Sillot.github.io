@@ -16,7 +16,7 @@ export class LocalMapBuilder {
 const bioStore = useBioChainStore();
     // 检查根路径是否存在
     if (!bioStore.bioChainMap[root]) {
-      console.warn(`根路径不存在于映射中: ${root}`);
+      // console.warn(`根路径不存在于映射中: ${root}`);
       return { nodes: [], links: [] };
     }
 

@@ -127,6 +127,9 @@ export default defineUserConfig({
     /* 文章字数统计、阅读时间，设置为 false 则禁用 */
     readingTime: {},
 
+    /** 为站点添加 llms.txt，以提供对 LLM 友好的内容。关联插件： @vuepress/plugin-llms */
+    llmstxt: true,
+
     /**
      * markdown
      * @see https://theme-plume.vuejs.press/config/markdown/

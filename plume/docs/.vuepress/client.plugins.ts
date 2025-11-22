@@ -31,6 +31,26 @@ export function setupPinia(app: App, isSSR: boolean) {
 }
 
 /**
+ * 初始化网站设计插件
+ */
+export async function setupSiteDesignPlugin(app: App, router: Router) {
+  // 路由守卫处理
+  router.beforeEach((to) => {
+    if (
+      to.path.startsWith("/pagefind.html") ||
+      (to.path.startsWith("/pagefind/") && !to.path.endsWith("/"))
+    ) {
+      // 自动添加尾部斜杠，确保与创建的页面路径一致 pagefind/a.thml -> pagefind/a/
+      const normalizedPath = to.path.endsWith("/") ? to.path : to.path + "/";
+      if (normalizedPath !== to.path) {
+        return normalizedPath.replace(".html", "");
+      }
+    }
+  });
+  console.log("网站设计插件初始化完成");
+}
+
+/**
  * 初始化作者插件
  */
 export async function setupAuthorPlugin(app: App, router: Router) {
@@ -40,7 +60,7 @@ export async function setupAuthorPlugin(app: App, router: Router) {
   try {
     // @ts-ignore
     const authorData = await import("@temp/author-data.ts");
-    console.log("@temp/author-data.ts ok", authorData.default);
+    // console.log("@temp/author-data.ts ok", authorData.default);
     authorStore.setAuthors(authorData.default);
   } catch (error) {
     console.warn("作者数据加载失败:", error);
@@ -74,7 +94,7 @@ export async function setupBiGraphPlugin() {
     console.log(`@temp/${TEMP_FILE_NAMES.BIO_TS}.js ok`, {
       页面数: bioData.pageCount,
       有效页面数: bioData.validPageCount,
-    }, bioData.default);
+    });
 
     bioStore.BiGraph = bioData.default;
     BioChainService.build(bioStore.BiGraph!.getAllPages());
@@ -91,12 +111,15 @@ export async function setupPlugins(context: EnhanceContext) {
   //@ts-ignore
   const isSSR = import.meta.env.SSR;
 
-  // 1. 初始化 Pinia
+  // 初始化 Pinia
   setupPinia(app, isSSR);
 
-  // 3. 初始化作者插件
+  // 初始化作者插件
   await setupAuthorPlugin(app, router);
 
-  // 4. 初始化 BiGraph 插件
+  // 初始化 BiGraph 插件
   await setupBiGraphPlugin();
+
+  // 初始化网站设计插件
+  await setupSiteDesignPlugin(app, router);
 }

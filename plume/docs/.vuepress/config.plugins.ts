@@ -1,9 +1,10 @@
 // add to config.ts
-import { llmsPlugin } from "@vuepress/plugin-llms"; // 为你的站点添加 llms.txt，以提供对 LLM 友好的内容。https://ecosystem.vuejs.press/zh/plugins/ai/llms.html
+
 import { revealJsPlugin } from "@vuepress/plugin-revealjs"; // 在你的 VuePress 中添加幻灯片
 import { slimsearchPlugin } from "@vuepress/plugin-slimsearch";
 import BiGraph from "./plugins/BiGraph/client/index";
 import AuthorPlugin from "./plugins/vuepress-plugin-sillot-author";
+import SiteDesign from "./plugins/vuepress-plugin-sillot-site-design";
 import SillotBlockPlugin from "./plugins/vuepress-plugin-sillot-block";
 import vuepressPluginSillotCedoss from "./plugins/vuepress-plugin-sillot-cedoss";
 import { Jieba } from "@node-rs/jieba";
@@ -13,15 +14,13 @@ import { dict } from "@node-rs/jieba/dict.js";
 const jieba = Jieba.withDict(dict);
 
 export default [
-    llmsPlugin({
-      // 配置项
-    }),
     vuepressPluginSillotCedoss(),
     // 注册Sillot标签插件（传入自定义配置）
     SillotBlockPlugin({
       videoTabs: {},
     }),
     AuthorPlugin(),
+    SiteDesign(),
     BiGraph({
       localGraphDeep: 20,
       foldEmptyGraph: false, // 无链接时不隐藏，方便打开全局图

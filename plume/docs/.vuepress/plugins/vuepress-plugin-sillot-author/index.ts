@@ -14,7 +14,7 @@ const authorMap = new Map<string, AuthorConfig>();
  * 添加页面ref: https://v2.vuepress.vuejs.org/zh/advanced/cookbook/adding-extra-pages.html#%E6%B7%BB%E5%8A%A0%E9%BB%98%E8%AE%A4%E7%9A%84%E4%B8%BB%E9%A1%B5
  */
 export default (): Plugin => ({
-  name: "vuepress-plugin-sillot-author", // 插件名称
+  name: TAG, // 插件名称
 
   async onInitialized(app) {
     console.log(TAG, "开始处理作者数据..."); // 添加起始日志

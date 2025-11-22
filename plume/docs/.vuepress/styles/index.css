@@ -1,4 +1,11 @@
 /* 全局生效样式，如非必要不推荐添加 */
+html:not([data-theme="dark"]):root {
+    --vp-c-bg: #dedede4d !important;
+}
+/* 适配 data-theme="dark" 的暗黑主题 */
+html[data-theme="dark"]:root {
+
+}
 
 /**
  * post tag
