@@ -34,7 +34,7 @@ export default defineUserConfig({
         // allowedHosts: ['pc.sc']
       },
       ssr: {
-        noExternal: ["naive-ui", "date-fns", "vueuc"], // 'date-fns', 'vueuc' 是 naive-ui 的依赖
+        noExternal: ["naive-ui", "date-fns", "vueuc", "@microsoft/clarity"], // 'date-fns', 'vueuc' 是 naive-ui 的依赖
       },
     },
     devServer: {
