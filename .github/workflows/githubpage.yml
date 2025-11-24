@@ -17,31 +17,17 @@ jobs:
           # “最近更新时间” 等 git 日志相关信息，需要拉取全部提交记录
           fetch-depth: 0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          # 选择要使用的 pnpm 版本
-          version: 10
-          # 移除自动安装，我们稍后手动安装
-          run_install: false
+          bun-version: latest
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          # 选择要使用的 node 版本
-          node-version: 22
-          # 缓存 pnpm 依赖
-          cache: pnpm
-          cache-dependency-path: plume/pnpm-lock.yaml
-
-       # 安装依赖（在 plume 目录中）
       - name: Install dependencies
-        run: pnpm install
+        run: bun install
         working-directory: plume
 
-      # 运行构建脚本
       - name: Build VuePress site
-        run: pnpm docs:build
+        run: bun docs:build
         working-directory: plume
 
       # 添加 CNAME 文件
