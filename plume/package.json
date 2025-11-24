@@ -38,6 +38,7 @@
     "vuepress-theme-plume": "1.0.0-rc.178"
   },
   "dependencies": {
+    "@microsoft/clarity": "^1.0.0",
     "artplayer": "^5.2.3",
     "chart.js": "^4.5.0",
     "d3": "^7.9.0",

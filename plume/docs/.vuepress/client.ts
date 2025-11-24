@@ -2,7 +2,7 @@ import { defineClientConfig } from "vuepress/client";
 
 import { setupUI } from "./client.components";
 import { setupPlugins } from "./client.plugins";
-
+import Clarity from '@microsoft/clarity';
 // 布局
 import Layout from "./layouts/Layout.vue";
 import AuthorDetail from "./plugins/vuepress-plugin-sillot-author/components/AuthorDetailPage.vue";
@@ -50,5 +50,7 @@ export default defineClientConfig({
     });
 
     console.log("页面搜索路由已注册");
+
+    Clarity.init("ub9am2gcgh");
   },
 });
