@@ -25,10 +25,10 @@ export function extendSillotVideoTabs(
         }
 
         const attrs = parseAttrs(attrsStr);
-        console.log(`[SillotTabs] 解析后的属性对象:`, attrs);
+        // console.log(`[SillotTabs] 解析后的属性对象:`, attrs);
 
         const result = handler(attrs, options);
-        console.log(`[SillotTabs] 替换结果:`, result);
+        // console.log(`[SillotTabs] 替换结果:`, result);
         return result;
       },
     );
@@ -51,14 +51,14 @@ export function parseAttrs(attrsStr: string): Record<string, string> {
     .replace(/\s+/g, " ")
     .trim();
 
-  console.log(`[SillotTabs] 清理后的属性字符串: "${cleanAttrsStr}"`);
+  // console.log(`[SillotTabs] 清理后的属性字符串: "${cleanAttrsStr}"`);
 
   let match;
   while ((match = attrRegex.exec(cleanAttrsStr))) {
     const [, key, value] = match;
     if (key && value) {
       attrs[key] = value.trim();
-      console.log(`[SillotTabs] 解析属性: ${key} = "${attrs[key]}"`);
+      // console.log(`[SillotTabs] 解析属性: ${key} = "${attrs[key]}"`);
     }
   }
 
@@ -72,7 +72,7 @@ export function handleVideoTabs(
   attrs: Record<string, string>,
   pluginOptions: PluginOptions = {},
 ): string {
-  console.log(`[SillotTabs] 处理视频标签，接收属性:`, attrs);
+  // console.log(`[SillotTabs] 处理视频标签，接收属性:`, attrs);
 
   // 定义完整的默认平台配置（包含 attrKey）
   const defaultTabs: VideoTabConfig[] = [
@@ -117,7 +117,7 @@ export function handleVideoTabs(
     tabs: mergedTabs,
   };
 
-  console.log(`[SillotTabs] 合并后的平台配置:`, config.tabs);
+  // console.log(`[SillotTabs] 合并后的平台配置:`, config.tabs);
 
   const { active = config.tabs[0]?.title || "" } = attrs;
 
