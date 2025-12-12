@@ -100,7 +100,7 @@ export default defineUserConfig({
     },
 
     /* 本地搜索, 默认启用 */
-    search: false, //{ provider: 'local' },
+    search: { provider: 'local' },
 
     /**
      * Algolia DocSearch

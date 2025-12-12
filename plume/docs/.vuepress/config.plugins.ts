@@ -31,21 +31,22 @@ export default [
     // 插件选项
   }),
   // 分词构建后也生效，docs:preview 未生效可能是缓存问题
-  slimsearchPlugin({
-    indexContent: true,
-    suggestion: true,
-    indexOptions: {
-      tokenize: (text, fieldName) => {
-        return fieldName === "id" ? [text] : jieba.cut(text, true);
-      },
-    },
-    customFields: [
-      {
-        name: "author",
-        //@ts-ignore
-        getter: (page) => page.frontmatter.author,
-        formatter: "作者：$content",
-      },
-    ],
-  }),
+  // 2025年12月13日更新后error TypeError: Cannot read properties of undefined (reading 'lang')，暂时懒得排查，反正静态搜索都差强人意
+  // slimsearchPlugin({
+  //   indexContent: true,
+  //   suggestion: true,
+  //   indexOptions: {
+  //     tokenize: (text, fieldName) => {
+  //       return fieldName === "id" ? [text] : jieba.cut(text, true);
+  //     },
+  //   },
+  //   customFields: [
+  //     {
+  //       name: "author",
+  //       //@ts-ignore
+  //       getter: (page) => page.frontmatter.author,
+  //       formatter: "作者：$content",
+  //     },
+  //   ],
+  // }),
 ];
