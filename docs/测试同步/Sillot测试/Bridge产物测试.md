@@ -3,6 +3,8 @@ createTime: 2026-04-20T12:00:00.000Z
 tags:
   - 测试
   - Bridge
+title: Bridge产物测试
+permalink: /publish/wc1jyjg4/
 ---
 
 # Bridge 产物测试

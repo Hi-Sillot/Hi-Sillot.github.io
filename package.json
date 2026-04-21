@@ -7,7 +7,7 @@
   "author": "绛亽 <83791825+Soltus@users.noreply.github.com>",
   "license": "MIT",
   "scripts": {
-    "docs:build": "vuepress build docs --clean-cache --clean-temp && npx -y pagefind --site docs/.vuepress/dist",
+    "docs:build": "node scripts/check-permalink-conflicts.mjs && vuepress build docs --clean-cache --clean-temp && npx -y pagefind --site docs/.vuepress/dist",
     "docs:dev": "vuepress dev docs",
     "docs:dev-clean": "vuepress dev docs --clean-cache --clean-temp",
     "docs:preview": "http-server docs/.vuepress/dist",

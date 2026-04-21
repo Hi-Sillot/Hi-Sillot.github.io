@@ -29,6 +29,8 @@ jobs:
       - name: Build VuePress site
         run: bun docs:build
         working-directory: .
+        env:
+          CI: true
 
       # 添加 CNAME 文件
       - name: Add CNAME file

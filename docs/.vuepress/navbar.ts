@@ -24,6 +24,7 @@ export default defineNavbarConfig([
     text: '更多',
     items: [
       { text: '测试用例', link: '/demo/README.md' },
+      { text: '发布', link: '/publish/README.md' },
       { text: '数据统计', link: '/col_doc/4_stats/README.md' },
       { text: '友链', link: '/friends/' },
       { text: '署名编辑', link: '/authors/' },

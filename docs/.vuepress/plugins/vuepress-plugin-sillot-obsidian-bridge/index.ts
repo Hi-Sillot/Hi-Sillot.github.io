@@ -14,6 +14,7 @@ export default (): Plugin => {
       await fsp.mkdir(outputDir, { recursive: true });
 
       await generatePathMap(app, outputDir);
+      await generatePermalinkIndex(app, outputDir);
       await generateBridgeCss(app, outputDir);
       await generateSyntaxDescriptors(app, outputDir);
       await generateComponentProps(app, outputDir);
@@ -49,6 +50,38 @@ async function generatePathMap(app: App, outputDir: string) {
     version: new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14),
     entries: Array.from(dedupedMap.values()),
   });
+}
+
+async function generatePermalinkIndex(app: App, outputDir: string) {
+  const entries: { permalink: string; filePath: string; title: string; collection: string }[] = [];
+
+  for (const page of app.pages) {
+    if (page.path.startsWith("/404")) continue;
+
+    const frontmatter = page.frontmatter as { permalink?: string };
+    const permalink = frontmatter.permalink || page.path;
+    const filePath = page.filePathRelative || "";
+
+    if (!filePath) continue;
+
+    entries.push({
+      permalink,
+      filePath,
+      title: page.title || "",
+      collection: extractCollection(filePath),
+    });
+  }
+
+  await writeJSON(path.join(outputDir, "permalink-index.json"), {
+    version: new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14),
+    count: entries.length,
+    entries,
+  });
+}
+
+function extractCollection(filePath: string): string {
+  const parts = filePath.split("/");
+  return parts.length > 1 ? parts[0] : "";
 }
 
 async function generateBridgeCss(app: App, outputDir: string) {

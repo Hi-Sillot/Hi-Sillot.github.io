@@ -90,6 +90,13 @@ const doc_stats = defineCollection({
   title: '数据统计',
   sidebar: 'auto',
 })
+const demo_obsidian_publish = defineCollection({
+  type: 'doc',
+  dir: '测试同步',
+  linkPrefix: '/publish',
+  title: '发布',
+  sidebar: 'auto',
+})
 
 /**
  * 导出所有的 collections
@@ -103,4 +110,5 @@ export default defineCollections([
   doc_releaseNotes,
   doc_sillotGuides,
   doc_stats,
+  demo_obsidian_publish,
 ])
