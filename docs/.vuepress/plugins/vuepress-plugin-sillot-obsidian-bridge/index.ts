@@ -1,5 +1,6 @@
 import type { Plugin, App, Page } from "@vuepress/core";
 import fsp from "node:fs/promises";
+import fs from "node:fs";
 import path from "node:path";
 
 const TAG = "vuepress-plugin-sillot-obsidian-bridge";
@@ -15,6 +16,7 @@ export default (): Plugin => {
 
       await generatePathMap(app, outputDir);
       await generatePermalinkIndex(app, outputDir);
+      await generatePublishStatus(app, outputDir);
       await generateBridgeCss(app, outputDir);
       await generateSyntaxDescriptors(app, outputDir);
       await generateComponentProps(app, outputDir);
@@ -82,6 +84,68 @@ async function generatePermalinkIndex(app: App, outputDir: string) {
 function extractCollection(filePath: string): string {
   const parts = filePath.split("/");
   return parts.length > 1 ? parts[0] : "";
+}
+
+async function generatePublishStatus(app: App, outputDir: string) {
+  const statusMap: Record<string, { mtime: number; hash: string; publishId?: string }> = {};
+  const publishIdIndex: Record<string, string> = {};
+  const sourceDir = app.dir.source();
+
+  for (const page of app.pages) {
+    if (page.path.startsWith("/404")) continue;
+
+    const filePath = page.filePathRelative || "";
+    if (!filePath) continue;
+
+    const fullPath = path.join(sourceDir, filePath);
+    try {
+      const stat = fs.statSync(fullPath);
+      const content = fs.readFileSync(fullPath, "utf-8");
+      const hash = hashContent(content);
+      const publishId = extractFrontmatterField(content, "publishId");
+      const entry: { mtime: number; hash: string; publishId?: string } = { mtime: stat.mtimeMs, hash };
+      if (publishId) {
+        entry.publishId = publishId;
+        publishIdIndex[publishId] = filePath;
+      }
+      statusMap[filePath] = entry;
+    } catch {
+      statusMap[filePath] = { mtime: Date.now(), hash: "" };
+    }
+  }
+
+  await writeJSON(path.join(outputDir, "publish-status.json"), {
+    version: new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14),
+    count: Object.keys(statusMap).length,
+    entries: statusMap,
+    publishIdIndex,
+  });
+}
+
+function extractFrontmatterField(content: string, field: string): string | null {
+  const lines = content.split(/\r?\n/);
+  if (lines[0] !== "---") return null;
+  const endIdx = lines.indexOf("---", 1);
+  if (endIdx === -1) return null;
+
+  for (let i = 1; i < endIdx; i++) {
+    const line = lines[i];
+    if (line.startsWith(`${field}:`) || line.startsWith(`${field} :`)) {
+      const value = line.substring(line.indexOf(":") + 1).trim().replace(/^['"]|['"]$/g, "");
+      return value || null;
+    }
+  }
+  return null;
+}
+
+function hashContent(content: string): string {
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    const chr = content.charCodeAt(i);
+    hash = ((hash << 5) - hash) + chr;
+    hash |= 0;
+  }
+  return hash.toString(36);
 }
 
 async function generateBridgeCss(app: App, outputDir: string) {
