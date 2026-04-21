@@ -3,14 +3,13 @@
 import type { Plugin } from "@vuepress/core";
 import type { Markdown } from "vuepress/markdown";
 import { handleCedossContainer } from "./handler/cedoss-container";
+import { BuildLogger } from "../build-logger";
 
 let TAG = "vuepress-plugin-sillot-cedoss";
+const logger = new BuildLogger(TAG);
 
-/**
- * 插件入口
- */
 export default (): Plugin => {
-  console.log(`[${TAG}] 插件加载成功`);
+  logger.log("插件加载成功");
   return {
     name: TAG, // 插件名称
 

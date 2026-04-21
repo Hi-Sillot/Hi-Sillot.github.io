@@ -5,14 +5,13 @@ import type { Markdown } from "vuepress/markdown";
 import { extendSillotVideoTabs, handleVideoTabs, parseAttrs } from "./tabs/sillot-video-tabs";
 import { initIndexMe } from "./banner/indexMe";
 import type { PluginOptions } from "./types";
+import { BuildLogger } from "../build-logger";
 
 let TAG = "vuepress-plugin-sillot-block";
+const logger = new BuildLogger(TAG);
 
-/**
- * 插件入口
- */
 export default (options: PluginOptions = {}): Plugin => {
-  console.log(`[${TAG}] 插件加载成功`, JSON.stringify(options));
+  logger.log("插件加载成功", JSON.stringify(options));
   return {
     name: TAG, // 插件名称
 

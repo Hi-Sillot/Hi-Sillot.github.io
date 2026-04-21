@@ -1,8 +1,10 @@
 import type { Page, Plugin } from "@vuepress/core";
 import { createPage } from "vuepress/core";
 import type { Markdown } from "vuepress/markdown";
+import { BuildLogger } from "../build-logger";
 
 let TAG = "vuepress-plugin-sillot-site-design";
+const logger = new BuildLogger(TAG);
 
 /**
  * 插件入口
@@ -23,7 +25,7 @@ export default (): Plugin => ({
       // 简单的 Markdown 内容，实际上会被组件覆写
       content: `# 搜索页面\n\n这是搜索页面。`,
     });
-    console.log(`创建虚拟页面: /pagefind/`);
+    logger.log("创建虚拟页面: /pagefind/");
     app.pages.push(virtualPage_pagefind);
 
     // 为所有页面注入 Pagefind 过滤器
@@ -35,7 +37,7 @@ export default (): Plugin => ({
           // 在页面内容开头注入过滤器 HTML
           page.content = filterHTML + page.content;
 
-          console.log(`为页面 ${page.path} 注入 Pagefind 过滤器`);
+          logger.log(`为页面 ${page.path} 注入 Pagefind 过滤器`);
         }
       }
     });

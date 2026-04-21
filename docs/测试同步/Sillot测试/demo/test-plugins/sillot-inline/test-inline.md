@@ -1,7 +1,7 @@
 ---
 title: test-inline
 createTime: 2025/11/20 22:35:25
-permalink: /demo/fjov1d55/
+permalink: /publish/blhri1nz/
 ---
 
 

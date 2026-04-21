@@ -36,6 +36,14 @@ jobs:
         env:
           CI: true
 
+      - name: Upload plugin build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-build-log
+          path: docs/.vuepress/plugin-build.log
+          retention-days: 7
+
       # 添加 CNAME 文件
       - name: Add CNAME file
         run: echo "hi.sillot.top" > dist/CNAME

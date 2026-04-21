@@ -66,7 +66,7 @@
     white-space: nowrap; /* 防止内容折行 */
   }
   
-  table:has(.IssueLabel) td:nth-child(:last-child) {
+  table:has(.IssueLabel) td:last-child {
     width: auto; /* 如果需要，可以调整最后一列的宽度 */
   }
   

@@ -5,8 +5,10 @@ import { createPage } from "vuepress/core";
 import type { Markdown } from "vuepress/markdown";
 import type { AuthorConfig, AuthorInfo, PostMeta } from "./types";
 import { useAuthorStore } from "./stores/author";
+import { BuildLogger } from "../build-logger";
 
 let TAG = "vuepress-plugin-sillot-author";
+const logger = new BuildLogger(TAG);
 const authorMap = new Map<string, AuthorConfig>();
 
 /**
@@ -17,7 +19,7 @@ export default (): Plugin => ({
   name: TAG, // 插件名称
 
   async onInitialized(app) {
-    console.log(TAG, "开始处理作者数据..."); // 添加起始日志
+    logger.log("开始处理作者数据...");
 
     let processedCount = 0;
 
@@ -41,11 +43,11 @@ export default (): Plugin => ({
 
       // 调试输出（输出到构建终端）
       if (authors.length > 0) {
-        console.log(
-          `[author-data] 在页面 ${page.path} 中发现 ${authors.length} 位作者`,
+        logger.log(
+          `在页面 ${page.path} 中发现 ${authors.length} 位作者`,
         );
         authors.forEach((a) => {
-          console.log(`  作者: ${a.name} (${a.slug})`);
+          logger.log(`  作者: ${a.name} (${a.slug})`);
         });
       }
 
@@ -70,7 +72,7 @@ export default (): Plugin => ({
         processedCount++;
       });
     });
-    console.log(TAG, `共处理 ${processedCount} 位作者关联`);
+    logger.log(`共处理 ${processedCount} 位作者关联`);
 
      // 为每个作者创建虚拟页面
     const authorPages: Page[] = [];
@@ -89,9 +91,9 @@ export default (): Plugin => ({
           content: `# ${authorConfig.name}\n\n这是 ${authorConfig.name} 的作者页面。`,
         });
         authorPages.push(virtualPage);
-        console.log(`创建虚拟作者页面: /authors/${slug}/`);
+        logger.log(`创建虚拟作者页面: /authors/${slug}/`);
       } catch (error) {
-        console.error(`创建作者页面失败 (${slug}):`, error);
+        logger.error(`创建作者页面失败 (${slug}):`, error);
       }
     }
     const virtualPage_authors = await createPage(app, {
@@ -105,10 +107,10 @@ export default (): Plugin => ({
           content: `# 作者页面\n\n这是作者页面。`,
         });
         authorPages.push(virtualPage_authors);
-        console.log(`创建虚拟作者页面: /authors/`);
+        logger.log("创建虚拟作者页面: /authors/");
     // 一次性添加所有虚拟页面
     app.pages.push(...authorPages);
-    console.log(TAG, `已添加 ${authorMap.size} 个虚拟作者页面`);
+    logger.log(`已添加 ${authorMap.size} 个虚拟作者页面`);
 
     // 写入TS格式的临时文件
     await app.writeTemp(
@@ -119,7 +121,7 @@ export default (): Plugin => ({
         } as Record<string, AuthorConfig>;`,
     );
 
-    console.log(TAG, "作者数据已写入临时文件");
+    logger.log("作者数据已写入临时文件");
   },
 
 });

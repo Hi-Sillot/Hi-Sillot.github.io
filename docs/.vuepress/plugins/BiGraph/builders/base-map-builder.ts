@@ -1,6 +1,9 @@
 // builders/base-map-builder.ts
 import type { MapNodeLink, Node, BioChainMapItem } from "../types";
 import { useBioChainStore } from "../stores/bioChain";
+import { BuildLogger } from "../../build-logger";
+
+const logger = new BuildLogger("BaseMapBuilder");
 
 /**
  * 图谱构建器基类
@@ -13,7 +16,7 @@ abstract class BaseMapBuilder {
 // const bioStore = useBioChainStore();
 //     const bioItem = bioStore.bioChainMap[path];
 //     if (!bioItem) {
-//       console.warn(`未找到路径对应的生物链项: ${path}`);
+//       logger.warn(`未找到路径对应的生物链项: ${path}`);
 //       return;
 //     }
 
@@ -61,7 +64,7 @@ abstract class BaseMapBuilder {
 // const bioStore = useBioChainStore();
 //       // 检查链接目标是否存在
 //       if (!bioStore.bioChainMap[link]) {
-//         console.warn(`链接目标不存在: ${link} (来自 ${currentPath})`);
+//       logger.warn(`链接目标不存在: ${link} (来自 ${currentPath})`);
 //         return;
 //       }
 
@@ -119,7 +122,7 @@ export const addNodeToGraph = (graph: MapNodeLink, path: string): void => {
   const bioStore = useBioChainStore();
   const bioItem = bioStore.bioChainMap[path];
   if (!bioItem) {
-    console.warn(`未找到路径对应的生物链项: ${path}`);
+    logger.warn(`未找到路径对应的生物链项: ${path}`);
     return;
   }
 
@@ -167,7 +170,7 @@ export const processLinkType = (
     const bioStore = useBioChainStore();
     // 检查链接目标是否存在
     if (!bioStore.bioChainMap[link]) {
-      console.warn(`链接目标不存在: ${link} (来自 ${currentPath})`);
+      logger.warn(`链接目标不存在: ${link} (来自 ${currentPath})`);
       return;
     }
 
@@ -186,7 +189,7 @@ export const processLinkType = (
     const targetExists = graph.nodes.some(node => node.id === target);
     
     if (!sourceExists || !targetExists) {
-      console.warn(`链接的节点不存在: ${source} -> ${target}`);
+      logger.warn(`链接的节点不存在: ${source} -> ${target}`);
       return;
     }
 

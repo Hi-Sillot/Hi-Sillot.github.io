@@ -1,5 +1,8 @@
 import type { Markdown } from "vuepress/markdown";
 import type { PluginOptions, TagHandlers, VideoTabConfig } from "../types";
+import { BuildLogger } from "../../build-logger";
+
+const logger = new BuildLogger("SillotTabs");
 
 
 export function extendSillotVideoTabs(
@@ -16,11 +19,11 @@ export function extendSillotVideoTabs(
     state.src = state.src.replace(
       sillotCommentRegex,
       (match, tagName, attrsStr) => {
-        console.log(`[SillotTabs] 发现标签: ${tagName}`);
+        logger.log(`发现标签: ${tagName}`);
 
         const handler = tagHandlers[tagName];
         if (!handler) {
-          console.warn(`[SillotTabs] 未找到处理器: ${tagName}`);
+          logger.warn(`未找到处理器: ${tagName}`);
           return match;
         }
 
@@ -121,32 +124,32 @@ export function handleVideoTabs(
 
   const { active = config.tabs[0]?.title || "" } = attrs;
 
-  console.log(`[SillotTabs] active 属性值: "${active}"`);
+  logger.log(`active 属性值: "${active}"`);
 
   // 1. 筛选有效的视频平台（对应的属性值不为空）
   const validTabs = config.tabs.filter((tab) => {
     if (!tab || !tab.attrKey) {
-      console.warn(`[SillotTabs] 无效的平台配置:`, tab);
+      logger.warn("无效的平台配置:", tab);
       return false;
     }
 
     const value = attrs[tab.attrKey];
     const isValid = value && value.trim() !== "";
-    console.log(
-      `[SillotTabs] 检查平台 ${tab.attrKey} (${tab.title}): 值="${value}", 有效=${isValid}`,
+    logger.log(
+      `检查平台 ${tab.attrKey} (${tab.title}): 值="${value}", 有效=${isValid}`,
     );
     return isValid;
   });
 
-  console.log(
-    `[SillotTabs] 有效平台数量: ${validTabs.length}`,
+  logger.log(
+    `有效平台数量: ${validTabs.length}`,
     validTabs.map((t) => t.title),
   );
 
   // 2. 检查合法性：至少需要2个有效视频才能生成tabs
   if (validTabs.length < 2) {
-    console.warn(
-      `[SillotTabs] 视频数量不足（${validTabs.length}个），需要至少2个视频才能生成标签页`,
+    logger.warn(
+      `视频数量不足（${validTabs.length}个），需要至少2个视频才能生成标签页`,
     );
     return `<!-- 视频数量不足（${validTabs.length}个），需要至少2个视频才能生成标签页 -->`;
   }
@@ -156,7 +159,7 @@ export function handleVideoTabs(
 
   validTabs.forEach((tab: VideoTabConfig, index: number) => {
     if (!tab || !tab.attrKey) {
-      console.warn(`[SillotTabs] 跳过无效的平台:`, tab);
+      logger.warn("跳过无效的平台:", tab);
       return;
     }
 

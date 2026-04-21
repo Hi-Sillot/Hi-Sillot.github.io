@@ -2,11 +2,14 @@ import type { Plugin, App, Page } from "@vuepress/core";
 import fsp from "node:fs/promises";
 import fs from "node:fs";
 import path from "node:path";
+import { LABEL_MAP, BANNER_MAP, VSCODE_SVG, CEDOSS_MAP } from "../vuepress-plugin-sillot-inline/shared/component-data";
+import { BuildLogger } from "../build-logger";
 
 const TAG = "vuepress-plugin-sillot-obsidian-bridge";
+const logger = new BuildLogger(TAG);
 
 export default (): Plugin => {
-  console.log(`[${TAG}] 插件加载成功`);
+  logger.log("插件加载成功");
   return {
     name: TAG,
 
@@ -21,9 +24,10 @@ export default (): Plugin => {
       await generateSyntaxDescriptors(app, outputDir);
       await generateComponentProps(app, outputDir);
       await generateAuthors(app, outputDir);
+      await generateInlineComponents(outputDir);
       await generateVersion(outputDir);
 
-      console.log(`[${TAG}] Bridge 产物已生成:`, outputDir);
+      logger.log("Bridge 产物已生成:", outputDir);
     },
   };
 };
@@ -169,7 +173,7 @@ async function generateBridgeCss(app: App, outputDir: string) {
       }
     }
   } catch {
-    console.warn(`[${TAG}] 无法读取 CSS 产物，生成空桥接文件`);
+    logger.warn("无法读取 CSS 产物，生成空桥接文件");
   }
 
   const vpToObsidian: Record<string, string> = {
@@ -414,5 +418,15 @@ async function generateVersion(outputDir: string) {
     version: new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14),
     buildTime: new Date().toISOString(),
     pluginVersion: "1.0.0",
+  });
+}
+
+async function generateInlineComponents(outputDir: string) {
+  await writeJSON(path.join(outputDir, "inline-components.json"), {
+    version: "1.0.0",
+    labels: LABEL_MAP,
+    banners: BANNER_MAP,
+    vscodeSvg: VSCODE_SVG,
+    cedossMap: CEDOSS_MAP,
   });
 }

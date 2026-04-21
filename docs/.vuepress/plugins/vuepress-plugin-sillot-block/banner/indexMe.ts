@@ -1,8 +1,10 @@
 import type { App, Page, Plugin } from "@vuepress/core";
 import { path } from "@vuepress/utils";
 import { createPage } from "vuepress/core";
+import { BuildLogger } from "../../build-logger";
 
 let TAG = "vuepress-plugin-sillot-block";
+const logger = new BuildLogger(TAG);
 
 // 目录节点接口
 export interface DirectoryNode {
@@ -20,7 +22,7 @@ export interface DirectoryIndex {
 }
 
 export async function initIndexMe(app: App) {
-  console.log(TAG, "开始生成目录索引数据...");
+  logger.log("开始生成目录索引数据...");
 
   // 构建完整的目录树
   const directoryTree = buildDirectoryTree(app.pages);
@@ -38,8 +40,8 @@ export async function initIndexMe(app: App) {
       `export const directoryTree = ${JSON.stringify(directoryTree, null, 2)};`,
   );
 
-  console.log(TAG, "目录索引数据已写入临时文件");
-  console.log(TAG, `共索引 ${Object.keys(directoryIndex).length} 个目录/文件`);
+  logger.log("目录索引数据已写入临时文件");
+  logger.log(`共索引 ${Object.keys(directoryIndex).length} 个目录/文件`);
 }
 
 /**

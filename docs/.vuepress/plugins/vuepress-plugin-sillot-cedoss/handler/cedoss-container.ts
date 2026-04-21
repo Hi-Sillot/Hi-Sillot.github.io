@@ -1,5 +1,8 @@
 // handler/cedoss-container.ts
 import type { Markdown } from "vuepress/markdown";
+import { BuildLogger } from "../../build-logger";
+
+const logger = new BuildLogger("CedossContainer");
 
 export interface CedossContainerOptions {
   debug?: boolean;
@@ -20,8 +23,8 @@ export function createFixedCedossContainerHandler(
   return (md: Markdown) => {
     md.core.ruler.after("normalize", "fixed-cedoss-container", (state) => {
       if (debug) {
-        console.log(
-          `[CedossContainer] 开始修复版本处理，原文长度: ${state.src.length}`,
+        logger.log(
+          `开始修复版本处理，原文长度: ${state.src.length}`,
         );
       }
 
@@ -43,8 +46,8 @@ export function createFixedCedossContainerHandler(
           innermostContainerRegex,
           (match, lineStart, colons, content) => {
             if (debug) {
-              console.log(
-                `[CedossContainer] 迭代 ${iteration}，处理容器，内容长度: ${content.length}`,
+              logger.log(
+                `迭代 ${iteration}，处理容器，内容长度: ${content.length}`,
               );
             }
 
@@ -66,14 +69,14 @@ export function createFixedCedossContainerHandler(
         );
 
         if (debug && processedSrc !== previousSrc) {
-          console.log(
-            `[CedossContainer] 迭代 ${iteration} 处理了容器，新长度: ${processedSrc.length}`,
+          logger.log(
+            `迭代 ${iteration} 处理了容器，新长度: ${processedSrc.length}`,
           );
         }
       }
 
       if (debug) {
-        console.log(`[CedossContainer] 处理完成，总共迭代 ${iteration} 次`);
+        logger.log(`处理完成，总共迭代 ${iteration} 次`);
       }
 
       state.src = processedSrc;
@@ -96,8 +99,8 @@ export function createStackBasedCedossContainerHandler(
   return (md: Markdown) => {
     md.core.ruler.after("normalize", "stack-cedoss-container", (state) => {
       if (debug) {
-        console.log(
-          `[CedossContainer] 开始栈式处理，原文长度: ${state.src.length}`,
+        logger.log(
+          `开始栈式处理，原文长度: ${state.src.length}`,
         );
       }
 
@@ -116,8 +119,8 @@ export function createStackBasedCedossContainerHandler(
           stack.push({ lineIndex: i, colonCount });
           processedLines.push(line);
           if (debug) {
-            console.log(
-              `[CedossContainer] 找到容器开始，冒号数量: ${colonCount}，行: ${i}`,
+            logger.log(
+              `找到容器开始，冒号数量: ${colonCount}，行: ${i}`,
             );
           }
           continue;
@@ -134,8 +137,8 @@ export function createStackBasedCedossContainerHandler(
             stack.pop();
 
             if (debug) {
-              console.log(
-                `[CedossContainer] 找到匹配的容器结束，冒号数量: ${colonCount}，匹配开始行: ${startInfo.lineIndex}`,
+              logger.log(
+                `找到匹配的容器结束，冒号数量: ${colonCount}，匹配开始行: ${startInfo.lineIndex}`,
               );
             }
 
@@ -174,8 +177,8 @@ export function createStackBasedCedossContainerHandler(
       state.src = processedLines.join("\n");
 
       if (debug) {
-        console.log(
-          `[CedossContainer] 栈式处理完成，新文长度: ${state.src.length}`,
+        logger.log(
+          `栈式处理完成，新文长度: ${state.src.length}`,
         );
       }
 
@@ -194,7 +197,7 @@ export function handleCedossContainer(
   const { debug = false } = options;
 
   if (debug) {
-    console.log(`[CedossContainer] 初始化修复处理器，选项:`, options);
+    logger.log("初始化修复处理器，选项:", options);
   }
 
   // 使用修复版本
