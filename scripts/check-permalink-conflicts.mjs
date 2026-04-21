@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline';
 
 const DOCS_DIR = join(import.meta.dirname, '..', 'docs');
 const IS_CI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+const CHECK_ONLY = process.argv.includes('--check-only');
 
 function extractPermalink(filePath) {
 	try {
@@ -180,10 +181,28 @@ async function main() {
 
 	if (conflicts.size === 0) {
 		console.log('未发现 permalink 冲突。');
+		if (CHECK_ONLY) {
+			const report = { hasConflicts: false, conflictCount: 0, conflicts: [] };
+			console.log(`::json-report::${JSON.stringify(report)}`);
+		}
 		return;
 	}
 
 	console.log(`发现 ${conflicts.size} 个 permalink 冲突！`);
+
+	if (CHECK_ONLY) {
+		const conflictList = [];
+		for (const [permalink, entries] of conflicts) {
+			const files = entries.map(e => ({
+				path: relative(DOCS_DIR, e.filePath).replace(/\\/g, '/'),
+				isPublishDir: e.isPublishDir,
+			}));
+			conflictList.push({ permalink, files });
+		}
+		const report = { hasConflicts: true, conflictCount: conflicts.size, conflicts: conflictList };
+		console.log(`::json-report::${JSON.stringify(report)}`);
+		return;
+	}
 
 	let actions;
 

@@ -26,7 +26,25 @@ jobs:
         id: install
         run: bun install
 
-      - name: Check permalink conflicts
+      - name: Detect permalink conflicts (check-only)
+        id: permalink-detect
+        run: |
+          OUTPUT=$(node scripts/check-permalink-conflicts.mjs --check-only 2>&1)
+          echo "$OUTPUT"
+          JSON_LINE=$(echo "$OUTPUT" | grep '::json-report::' | sed 's/::json-report:://')
+          if [ -n "$JSON_LINE" ]; then
+            echo "report=$JSON_LINE" >> $GITHUB_OUTPUT
+            HAS_CONFLICTS=$(echo "$JSON_LINE" | jq -r '.hasConflicts')
+            echo "has_conflicts=$HAS_CONFLICTS" >> $GITHUB_OUTPUT
+            CONFLICT_COUNT=$(echo "$JSON_LINE" | jq -r '.conflictCount')
+            echo "conflict_count=$CONFLICT_COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "report={}" >> $GITHUB_OUTPUT
+            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+            echo "conflict_count=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Auto-resolve permalink conflicts for build
         id: permalink
         run: node scripts/check-permalink-conflicts.mjs
         env:
@@ -67,6 +85,8 @@ jobs:
             const installOutcome = '${{ steps.install.outcome }}';
             const permalinkOutcome = '${{ steps.permalink.outcome }}';
             const buildOutcome = '${{ steps.build.outcome }}';
+            const hasConflicts = '${{ steps.permalink-detect.outputs.has_conflicts }}' === 'true';
+            const conflictCount = '${{ steps.permalink-detect.outputs.conflict_count }}';
 
             const allSuccess = installOutcome === 'success' && permalinkOutcome === 'success' && buildOutcome === 'success';
             const conclusion = allSuccess ? 'success' : 'failure';
@@ -81,11 +101,25 @@ jobs:
             const summaryLines = steps.map(s => `${s.outcome === 'success' ? '✅' : s.outcome === 'failure' ? '❌' : '⏭️'} ${s.name}`);
 
             let summary = summaryLines.join('\n');
+
+            if (hasConflicts) {
+              summary += `\n\n⚠️ **Permalink 冲突警告**: 发现 ${conflictCount} 个 permalink 冲突，构建时已自动处理（去掉发布目录中的重复 permalink）。`;
+            }
+
             if (failedSteps.length > 0) {
               summary += '\n\n**Failed steps:**\n';
               for (const s of failedSteps) {
                 summary += `- ${s.name}\n`;
               }
+            }
+
+            let title;
+            if (!allSuccess) {
+              title = `❌ ${failedSteps.length} 个步骤失败`;
+            } else if (hasConflicts) {
+              title = `⚠️ 构建通过（${conflictCount} 个 permalink 冲突已自动处理）`;
+            } else {
+              title = '✅ 构建检查通过';
             }
 
             await github.rest.checks.create({
@@ -96,7 +130,7 @@ jobs:
               status: 'completed',
               conclusion: conclusion,
               output: {
-                title: allSuccess ? '✅ 构建检查通过' : `❌ ${failedSteps.length} 个步骤失败`,
+                title: title,
                 summary: summary,
               }
             });
@@ -109,6 +143,8 @@ jobs:
             const installOutcome = '${{ steps.install.outcome }}';
             const permalinkOutcome = '${{ steps.permalink.outcome }}';
             const buildOutcome = '${{ steps.build.outcome }}';
+            const hasConflicts = '${{ steps.permalink-detect.outputs.has_conflicts }}' === 'true';
+            const conflictCount = '${{ steps.permalink-detect.outputs.conflict_count }}';
             const allSuccess = installOutcome === 'success' && permalinkOutcome === 'success' && buildOutcome === 'success';
 
             const sha = context.payload.pull_request.head.sha.substring(0, 7);
@@ -119,7 +155,7 @@ jobs:
             ];
 
             const lines = [
-              `## ${allSuccess ? '✅ 构建检查通过' : '❌ 构建检查失败'}`,
+              `## ${allSuccess ? (hasConflicts ? '⚠️ 构建通过（有警告）' : '✅ 构建检查通过') : '❌ 构建检查失败'}`,
               '',
               `**Commit**: \`${sha}\``,
               '',
@@ -129,8 +165,15 @@ jobs:
               '',
             ];
 
-            if (allSuccess) {
+            if (hasConflicts) {
+              lines.push(`> ⚠️ **Permalink 冲突警告**: 发现 ${conflictCount} 个 permalink 冲突。构建时已自动去掉发布目录中的重复 permalink，但建议手动检查并修复。`);
+              lines.push('');
+            }
+
+            if (allSuccess && !hasConflicts) {
               lines.push('构建成功，站点可以正常部署。');
+            } else if (allSuccess && hasConflicts) {
+              lines.push('构建成功，但存在 permalink 冲突需要关注。');
             } else {
               const failed = steps.filter(s => s.outcome === 'failure').map(s => s.name);
               lines.push(`以下步骤失败：${failed.join(', ')}`);
@@ -143,4 +186,51 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: lines.join('\n'),
+            });
+
+      - name: Create PR Review with conflict details
+        if: always() && steps.permalink-detect.outputs.has_conflicts == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const reportJson = '${{ steps.permalink-detect.outputs.report }}';
+            let report;
+            try {
+              report = JSON.parse(reportJson);
+            } catch {
+              console.log('Failed to parse conflict report, skipping review');
+              return;
+            }
+
+            if (!report.hasConflicts || !report.conflicts || report.conflicts.length === 0) {
+              return;
+            }
+
+            const bodyLines = [
+              '## ⚠️ Permalink 冲突检测',
+              '',
+              `发现 **${report.conflictCount}** 个 permalink 冲突。构建时已自动去掉发布目录中的重复 permalink，但建议手动检查：`,
+              '',
+            ];
+
+            for (const conflict of report.conflicts) {
+              bodyLines.push(`### \`${conflict.permalink}\``);
+              bodyLines.push('');
+              for (const file of conflict.files) {
+                const tag = file.isPublishDir ? '📤 发布目录' : '📄 正式目录';
+                bodyLines.push(`- ${tag} \`${file.path}\``);
+              }
+              bodyLines.push('');
+            }
+
+            bodyLines.push('---');
+            bodyLines.push('');
+            bodyLines.push('> 💡 **建议**: 如果发布目录的文件是正式文件的副本，可以安全忽略（构建时会自动重新生成 permalink）。如果两个正式目录文件 permalink 冲突，需要手动修改其中一个。');
+
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              event: 'COMMENT',
+              body: bodyLines.join('\n'),
             });
