@@ -9,7 +9,7 @@ permalink: /publish/wc1jyjg4/
 
 # Bridge 产物测试
 
-本文档用于测试 VuePress → Obsidian Bridge 产物拉取和预览一致性。
+本文档用于测试 VuePress → Obsidian Bridge 产物拉取和预览一致性。666
 
 ## CSS 变量桥接
 
