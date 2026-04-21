@@ -1,0 +1,146 @@
+name: PR Build Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  build-check:
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        id: install
+        run: bun install
+
+      - name: Check permalink conflicts
+        id: permalink
+        run: node scripts/check-permalink-conflicts.mjs
+        env:
+          CI: true
+
+      - name: Build VuePress site
+        id: build
+        run: bun docs:build
+        env:
+          CI: true
+
+      - name: Collect build output info
+        id: info
+        if: always()
+        run: |
+          echo "## Build Output Structure" >> $GITHUB_STEP_SUMMARY
+          if [ -d "docs/.vuepress/dist" ]; then
+            echo "✅ dist directory exists" >> $GITHUB_STEP_SUMMARY
+            FILE_COUNT=$(find docs/.vuepress/dist -type f | wc -l)
+            echo "- Total files: ${FILE_COUNT}" >> $GITHUB_STEP_SUMMARY
+            HTML_COUNT=$(find docs/.vuepress/dist -name "*.html" -type f | wc -l)
+            echo "- HTML pages: ${HTML_COUNT}" >> $GITHUB_STEP_SUMMARY
+            CSS_COUNT=$(find docs/.vuepress/dist -name "*.css" -type f | wc -l)
+            echo "- CSS files: ${CSS_COUNT}" >> $GITHUB_STEP_SUMMARY
+            JS_COUNT=$(find docs/.vuepress/dist -name "*.js" -type f | wc -l)
+            echo "- JS files: ${JS_COUNT}" >> $GITHUB_STEP_SUMMARY
+            DIST_SIZE=$(du -sh docs/.vuepress/dist | cut -f1)
+            echo "- Total size: ${DIST_SIZE}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ dist directory not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Create Check Run
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const installOutcome = '${{ steps.install.outcome }}';
+            const permalinkOutcome = '${{ steps.permalink.outcome }}';
+            const buildOutcome = '${{ steps.build.outcome }}';
+
+            const allSuccess = installOutcome === 'success' && permalinkOutcome === 'success' && buildOutcome === 'success';
+            const conclusion = allSuccess ? 'success' : 'failure';
+
+            const steps = [
+              { name: 'Install dependencies', outcome: installOutcome },
+              { name: 'Check permalink conflicts', outcome: permalinkOutcome },
+              { name: 'Build VuePress site', outcome: buildOutcome },
+            ];
+
+            const failedSteps = steps.filter(s => s.outcome === 'failure');
+            const summaryLines = steps.map(s => `${s.outcome === 'success' ? '✅' : s.outcome === 'failure' ? '❌' : '⏭️'} ${s.name}`);
+
+            let summary = summaryLines.join('\n');
+            if (failedSteps.length > 0) {
+              summary += '\n\n**Failed steps:**\n';
+              for (const s of failedSteps) {
+                summary += `- ${s.name}\n`;
+              }
+            }
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Site Build Check',
+              head_sha: context.payload.pull_request.head.sha,
+              status: 'completed',
+              conclusion: conclusion,
+              output: {
+                title: allSuccess ? '✅ 构建检查通过' : `❌ ${failedSteps.length} 个步骤失败`,
+                summary: summary,
+              }
+            });
+
+      - name: Comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const installOutcome = '${{ steps.install.outcome }}';
+            const permalinkOutcome = '${{ steps.permalink.outcome }}';
+            const buildOutcome = '${{ steps.build.outcome }}';
+            const allSuccess = installOutcome === 'success' && permalinkOutcome === 'success' && buildOutcome === 'success';
+
+            const sha = context.payload.pull_request.head.sha.substring(0, 7);
+            const steps = [
+              { name: '📦 Install dependencies', outcome: installOutcome },
+              { name: '🔗 Check permalink conflicts', outcome: permalinkOutcome },
+              { name: '🏗️ Build VuePress site', outcome: buildOutcome },
+            ];
+
+            const lines = [
+              `## ${allSuccess ? '✅ 构建检查通过' : '❌ 构建检查失败'}`,
+              '',
+              `**Commit**: \`${sha}\``,
+              '',
+              '| Step | Status |',
+              '|------|--------|',
+              ...steps.map(s => `| ${s.name} | ${s.outcome === 'success' ? '✅ Pass' : s.outcome === 'failure' ? '❌ Fail' : '⏭️ Skipped'} |`),
+              '',
+            ];
+
+            if (allSuccess) {
+              lines.push('构建成功，站点可以正常部署。');
+            } else {
+              const failed = steps.filter(s => s.outcome === 'failure').map(s => s.name);
+              lines.push(`以下步骤失败：${failed.join(', ')}`);
+              lines.push('');
+              lines.push('请查看 [Actions 日志](' + context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + ') 修复错误后重新推送。');
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: lines.join('\n'),
+            });
