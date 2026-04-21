@@ -3,9 +3,7 @@ import type { LocalMapItem, MapNodeLink, QueueItem, Node } from "../types";
 import { optionsManager } from "../config/options";
 import { useBioChainStore } from "../stores/bioChain";
 import { updateLinkCounts } from "./base-map-builder";
-import { BuildLogger } from "../../build-logger";
-
-const logger = new BuildLogger("LocalMapBuilder");
+import { debug } from "../utils/debug";
 
 
 /**
@@ -72,7 +70,7 @@ const bioStore = useBioChainStore();
 const bioStore = useBioChainStore();
     const bioItem = bioStore.bioChainMap[permalink];
     if (!bioItem) {
-      logger.warn(`无法找到路径对应的生物链项: ${permalink}`);
+      debug.warn("LocalMapBuilder", `无法找到路径对应的生物链项: ${permalink}`);
       return false;
     }
 
