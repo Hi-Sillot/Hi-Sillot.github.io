@@ -2,3 +2,4 @@
 **/.cache
 **/.temp
 **/dist
+*.log

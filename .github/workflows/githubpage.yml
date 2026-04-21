@@ -24,16 +24,16 @@ jobs:
 
       - name: Install dependencies
         run: bun install
-        working-directory: plume
+        working-directory: .
 
       - name: Build VuePress site
         run: bun docs:build
-        working-directory: plume
+        working-directory: .
 
       # 添加 CNAME 文件
       - name: Add CNAME file
         run: echo "hi.sillot.top" > dist/CNAME
-        working-directory: plume/docs/.vuepress
+        working-directory: ./docs/.vuepress
 
       # 查看 workflow 的文档来获取更多信息
       # @see https://github.com/crazy-max/ghaction-github-pages
@@ -43,7 +43,7 @@ jobs:
           # 部署到 gh-pages 分支
           target_branch: gh-pages
           # 部署目录为 VuePress 的默认输出目录
-          build_dir: plume/docs/.vuepress/dist
+          build_dir: ./docs/.vuepress/dist
         env:
           # @see https://docs.github.com/cn/actions/reference/authentication-in-a-workflow#about-the-github_token-secret
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -7,6 +7,7 @@ import AuthorPlugin from "./plugins/vuepress-plugin-sillot-author";
 import SiteDesign from "./plugins/vuepress-plugin-sillot-site-design";
 import SillotBlockPlugin from "./plugins/vuepress-plugin-sillot-block";
 import vuepressPluginSillotCedoss from "./plugins/vuepress-plugin-sillot-cedoss";
+import ObsidianBridgePlugin from "./plugins/vuepress-plugin-sillot-obsidian-bridge";
 import { Jieba } from "@node-rs/jieba";
 import { dict } from "@node-rs/jieba/dict.js";
 
@@ -19,6 +20,7 @@ export default [
   SillotBlockPlugin({
     videoTabs: {},
   }),
+  ObsidianBridgePlugin(),
   AuthorPlugin(),
   SiteDesign(),
   BiGraph({
