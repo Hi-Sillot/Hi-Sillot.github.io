@@ -12,17 +12,13 @@ export class GlobalGraphService {
   /**
    * 获取全局图谱数据
    */
-  public static async getGlobalGraph(): Promise<MapNodeLink> {
+  public static getGlobalGraph(): MapNodeLink {
     debug.log(TAG, "开始获取全局图谱数据");
-    
+
     try {
-      const startTime = Date.now();
-      
       const graphData = GlobalMapBuilder.build();
-      const endTime = Date.now();
-      
+
       debug.log(TAG, "全局图谱数据获取完成", {
-        执行时间: `${endTime - startTime}ms`,
         节点数: graphData.nodes.length,
         链接数: graphData.links.length
       });
@@ -30,7 +26,6 @@ export class GlobalGraphService {
       return graphData;
     } catch (error) {
       debug.error(TAG, "获取全局图谱数据失败", error);
-      // 返回空数据而不是抛出错误
       return { nodes: [], links: [] };
     }
   }

@@ -193,10 +193,10 @@ export default defineUserConfig({
     comment: {
       provider: "Giscus", // "Artalk" | "Giscus" | "Twikoo" | "Waline"
       comment: true,
-      repo: "Hi-Sillot/docs",
+      repo: "Hi-Sillot/Hi-Sillot.github.io",
       repoId: "R_kgDOQSDvwg",
-      category: "Announcements",
-      categoryId: "DIC_kwDOQSDvws4CxmPy",
+      category: "General",
+      categoryId: "DIC_kwDOQSDvws4CxmPz",
       mapping: "pathname",
       strict: true,
       reactionsEnabled: true,

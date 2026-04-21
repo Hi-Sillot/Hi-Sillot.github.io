@@ -1,10 +1,6 @@
-// config/options.ts - 配置管理
-
 import type { BiGraphConfig } from "../types";
+import { DEFAULT_CONFIG } from "../constants/index";
 
-/**
- * 配置管理器
- */
 class OptionsManager {
   private static instance: OptionsManager;
   private _options: BiGraphConfig = {};
@@ -27,7 +23,19 @@ class OptionsManager {
   }
 
   public get localGraphDeep(): number {
-    return this._options.localGraphDeep || 5;
+    return this._options.localGraphDeep ?? DEFAULT_CONFIG.LOCAL_GRAPH_DEEP;
+  }
+
+  public getMergedConfig(): Required<BiGraphConfig> {
+    return {
+      foldEmptyGraph: this._options.foldEmptyGraph ?? DEFAULT_CONFIG.FOLD_EMPTY_GRAPH,
+      localGraphDeep: this._options.localGraphDeep ?? DEFAULT_CONFIG.LOCAL_GRAPH_DEEP,
+      graphMaxWidth: this._options.graphMaxWidth ?? DEFAULT_CONFIG.GRAPH_MAX_WIDTH,
+      graphHeight: this._options.graphHeight ?? DEFAULT_CONFIG.GRAPH_HEIGHT,
+      enableGlobalGraph: this._options.enableGlobalGraph ?? DEFAULT_CONFIG.ENABLE_GLOBAL_GRAPH,
+      enableLocalGraph: this._options.enableLocalGraph ?? DEFAULT_CONFIG.ENABLE_LOCAL_GRAPH,
+      titleGetter: this._options.titleGetter ?? ((page: any) => page.title || ""),
+    };
   }
 }
 

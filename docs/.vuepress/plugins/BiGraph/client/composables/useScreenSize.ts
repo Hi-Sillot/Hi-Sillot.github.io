@@ -5,11 +5,10 @@ import { BREAKPOINTS, EVENT_NAMES } from "../../constants";
 import type { ScreenState } from "../../types/localRelationship";
 
 let TAG = "useScreenSize.ts";
-// 日志计数器
-let logCounter = 0;
+
 function log(step: string, data?: any) {
   console.log(
-    `${TAG} ${++logCounter}. [useScreenSize] ${step}`,
+    `${TAG} [useScreenSize] ${step}`,
     data ? data : "",
   );
 }

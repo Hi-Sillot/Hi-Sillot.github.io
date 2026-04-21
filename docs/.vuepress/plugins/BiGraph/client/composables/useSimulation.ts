@@ -90,8 +90,8 @@ export function useSimulation(canvasSize: CanvasSize, data: MapNodeLink) {
    * 重启模拟
    */
   function restartSimulation(): void {
-    // if (isStable.value === false) return // 不稳定不需要重启
     console.log(TAG, "重启模拟", isStable.value);
+    isStable.value = false;
     if (simulation.value) {
       simulation.value
         .alpha(FORCE_CONFIG.simulation.restart.alpha)
@@ -120,6 +120,7 @@ export function useSimulation(canvasSize: CanvasSize, data: MapNodeLink) {
 
   return {
     simulation,
+    isStable,
     initializeSimulation,
     restartSimulation,
     updateForces,

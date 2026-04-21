@@ -38,17 +38,18 @@ const bioStore = useBioChainStore();
     visited: Set<string>,
     maxDeep: number
   ): void {
-const bioStore = useBioChainStore();
-    while (queue.length > 0) {
-      const { permalink, depth } = queue.shift()!;
+    const bioStore = useBioChainStore();
+    let head = 0;
+
+    while (head < queue.length) {
+      const { permalink, depth } = queue[head++];
 
       if (depth > maxDeep || visited.has(permalink)) {
         continue;
       }
 
       visited.add(permalink);
-      
-      // 添加当前节点到本地映射
+
       if (!this.addNodeToLocalMap(localMap, permalink)) {
         continue;
       }
@@ -56,11 +57,8 @@ const bioStore = useBioChainStore();
       const bioItem = bioStore.bioChainMap[permalink];
       if (!bioItem) continue;
 
-      // 处理出链
-      this.processLinks(localMap, queue, visited, permalink, bioItem.outlink, depth, maxDeep, 'outlink');
-      
-      // 处理入链
-      this.processLinks(localMap, queue, visited, permalink, bioItem.backlink, depth, maxDeep, 'backlink');
+      this.processLinks(queue, visited, bioItem.outlink, depth, maxDeep);
+      this.processLinks(queue, visited, bioItem.backlink, depth, maxDeep);
     }
   }
 
@@ -88,26 +86,18 @@ const bioStore = useBioChainStore();
    * 处理链接
    */
   private static processLinks(
-    localMap: Record<string, LocalMapItem>,
     queue: QueueItem[],
     visited: Set<string>,
-    currentPath: string,
     links: string[],
     currentDepth: number,
-    maxDeep: number,
-    linkType: 'outlink' | 'backlink'
+    maxDeep: number
   ): void {
     const nextDepth = currentDepth + 1;
-    
-const bioStore = useBioChainStore();
-    links.forEach((link) => {
-      // 检查链接目标是否存在
-      if (!bioStore.bioChainMap[link]) {
-        console.warn(`链接目标不存在: ${link} (来自 ${currentPath})`);
-        return;
-      }
+    const bioStore = useBioChainStore();
 
-      // 如果目标节点未被访问且未超过最大深度，加入队列
+    links.forEach((link) => {
+      if (!bioStore.bioChainMap[link]) return;
+
       if (!visited.has(link) && nextDepth <= maxDeep) {
         queue.push({ permalink: link, depth: nextDepth });
       }

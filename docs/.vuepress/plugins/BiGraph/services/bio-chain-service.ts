@@ -10,9 +10,10 @@ const TAG = "BioChainService";
  * 双链构建服务 - 修复链接解析问题
  */
 export class BioChainService {
-  /**
-   * 构建双链映射
-   */
+  private static filePathIndex: Map<string, string> = new Map();
+  private static htmlPathIndex: Map<string, string> = new Map();
+  private static permalinkVariationsIndex: Map<string, string> = new Map();
+
   public static async build(pages: Page[], titleGetter?: (page: Page) => string): Promise<void> {
     debug.log(TAG, '开始构建双链映射', { 
       总页面数: pages.length,
@@ -24,6 +25,7 @@ export class BioChainService {
       debug.log(TAG, '有效页面数', validPages.length);
 
       this.buildBioChainMap(validPages, titleGetter);
+      this.buildLookupIndices(validPages);
       this.processPageLinks(validPages);
 
       // 输出详细的调试信息
@@ -51,6 +53,28 @@ export class BioChainService {
     });
 
     return validPages;
+  }
+
+  private static buildLookupIndices(pages: Page[]): void {
+    this.filePathIndex.clear();
+    this.htmlPathIndex.clear();
+    this.permalinkVariationsIndex.clear();
+
+    for (const page of pages) {
+      const permalink = page.permalink!;
+      if (page.filePathRelative) {
+        this.filePathIndex.set(page.filePathRelative, permalink);
+      }
+      if (page.htmlFilePathRelative) {
+        this.htmlPathIndex.set(page.htmlFilePathRelative, permalink);
+      }
+      this.permalinkVariationsIndex.set(permalink, permalink);
+      if (permalink.startsWith('/')) {
+        this.permalinkVariationsIndex.set(permalink.substring(1), permalink);
+      } else {
+        this.permalinkVariationsIndex.set('/' + permalink, permalink);
+      }
+    }
   }
 
   /**
@@ -155,51 +179,35 @@ export class BioChainService {
 
     const bioStore = useBioChainStore();
     
-    // 1. 直接检查 permalink 是否存在
     if (bioStore.bioChainMap[linkRelative]) {
       return linkRelative;
     }
 
-    // 2. 检查是否是文件路径
-    const filePathMatch = pages.find(page => 
-      page.filePathRelative === linkRelative
-    );
+    const filePathMatch = this.filePathIndex.get(linkRelative);
     if (filePathMatch) {
-      return filePathMatch.permalink!;
+      return filePathMatch;
     }
 
-    // 3. 检查是否是 HTML 文件路径
-    const htmlPathMatch = pages.find(page => 
-      page.htmlFilePathRelative === linkRelative
-    );
+    const htmlPathMatch = this.htmlPathIndex.get(linkRelative);
     if (htmlPathMatch) {
-      return htmlPathMatch.permalink!;
+      return htmlPathMatch;
     }
 
-    // 4. 尝试处理常见的路径格式问题
-    return this.handleCommonPathIssues(linkRelative, pages);
+    return this.handleCommonPathIssues(linkRelative);
   }
 
-  /**
-   * 处理常见的路径问题
-   */
-  private static handleCommonPathIssues(linkRelative: string, pages: Page[]): string | null {
-    const bioStore = useBioChainStore();
-    
-    // 尝试添加/移除前导斜杠
-    const variations = [
+  private static handleCommonPathIssues(linkRelative: string): string | null {
+    const variations: string[] = [
       linkRelative,
       linkRelative.startsWith('/') ? linkRelative.substring(1) : '/' + linkRelative,
     ];
 
-    // 尝试处理 .md 扩展名
     if (linkRelative.endsWith('.md')) {
       variations.push(linkRelative.replace(/\.md$/, ''));
     } else {
       variations.push(linkRelative + '.md');
     }
 
-    // 尝试处理 index 文件
     if (linkRelative.endsWith('/index')) {
       variations.push(linkRelative.replace(/\/index$/, ''));
       variations.push(linkRelative.replace(/\/index$/, '/'));
@@ -210,24 +218,24 @@ export class BioChainService {
       variations.push(linkRelative.replace(/\/index\.md$/, '/'));
     }
 
-    // 检查所有变体
     for (const variation of variations) {
-      if (bioStore.bioChainMap[variation]) {
+      const permalink = this.permalinkVariationsIndex.get(variation);
+      if (permalink) {
         debug.log(TAG, '通过路径变体解析链接', {
           原始链接: linkRelative,
           使用变体: variation
         });
-        return variation;
+        return permalink;
       }
-      
-      // 也检查页面列表中的其他路径
-      const pageMatch = pages.find(page => 
-        page.permalink === variation ||
-        page.filePathRelative === variation ||
-        page.htmlFilePathRelative === variation
-      );
-      if (pageMatch) {
-        return pageMatch.permalink!;
+
+      const filePathMatch = this.filePathIndex.get(variation);
+      if (filePathMatch) {
+        return filePathMatch;
+      }
+
+      const htmlPathMatch = this.htmlPathIndex.get(variation);
+      if (htmlPathMatch) {
+        return htmlPathMatch;
       }
     }
 

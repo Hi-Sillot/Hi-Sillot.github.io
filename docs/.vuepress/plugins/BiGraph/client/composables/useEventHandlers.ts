@@ -20,6 +20,9 @@ export class EventHandlers {
   private mouseDownTime = 0;
   private mouseDownPosition: MousePosition = { x: 0, y: 0 };
 
+  private boundMouseMove: (e: MouseEvent | TouchEvent) => void;
+  private boundMouseUp: (e: MouseEvent | TouchEvent) => void;
+
   constructor(
     canvas: HTMLCanvasElement,
     simulation: d3.Simulation<Node, MapLink>,
@@ -34,6 +37,9 @@ export class EventHandlers {
     this.nodes = nodes;
     this.links = links;
     this.canvasSize = canvasSize;
+
+    this.boundMouseMove = this.onMouseMove.bind(this);
+    this.boundMouseUp = this.onMouseUp.bind(this);
   }
 
   setTransform(transform: d3.ZoomTransform): void {
@@ -83,11 +89,11 @@ export class EventHandlers {
       this.simulation.alphaTarget(0.3).restart();
 
       if ((event as TouchEvent).touches) {
-        window.addEventListener("touchmove", this.onMouseMove.bind(this), { passive: false });
-        window.addEventListener("touchend", this.onMouseUp.bind(this));
+        window.addEventListener("touchmove", this.boundMouseMove, { passive: false });
+        window.addEventListener("touchend", this.boundMouseUp);
       } else {
-        window.addEventListener("mousemove", this.onMouseMove.bind(this));
-        window.addEventListener("mouseup", this.onMouseUp.bind(this));
+        window.addEventListener("mousemove", this.boundMouseMove);
+        window.addEventListener("mouseup", this.boundMouseUp);
       }
     }
   }
@@ -131,11 +137,11 @@ export class EventHandlers {
       this.simulation.alphaTarget(0).alpha(0.3);
 
       if (event instanceof TouchEvent) {
-        window.removeEventListener("touchmove", this.onMouseMove.bind(this));
-        window.removeEventListener("touchend", this.onMouseUp.bind(this));
+        window.removeEventListener("touchmove", this.boundMouseMove);
+        window.removeEventListener("touchend", this.boundMouseUp);
       } else {
-        window.removeEventListener("mousemove", this.onMouseMove.bind(this));
-        window.removeEventListener("mouseup", this.onMouseUp.bind(this));
+        window.removeEventListener("mousemove", this.boundMouseMove);
+        window.removeEventListener("mouseup", this.boundMouseUp);
       }
     }
   }

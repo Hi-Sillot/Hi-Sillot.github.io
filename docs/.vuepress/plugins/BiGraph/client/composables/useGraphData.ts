@@ -5,7 +5,6 @@ import { useRouter } from "vue-router";
 import type { MapNodeLink } from "../../types";
 import { getGraphData } from "../../utils/graph-data";
 import { debug } from "../../utils/debug";
-debug.disable();
 
 const TAG = "useGraphData";
 
@@ -25,6 +24,7 @@ export function useGraphData() {
   const retryCount = ref(0);
   const maxRetries = 3;
   const isLoaded = ref(false);
+  let loadGeneration = 0;
 
   debug.log(TAG, "组合式函数初始化完成", {
     当前路径: page.value.path,
@@ -70,6 +70,8 @@ export function useGraphData() {
       加载状态: isLoading.value,
     });
 
+    const currentGeneration = ++loadGeneration;
+
     if (isLoading.value) {
       debug.log(TAG, "数据正在加载中，跳过重复加载");
       return;
@@ -81,6 +83,11 @@ export function useGraphData() {
     try {
       debug.log(TAG, "调用 getGraphData 获取数据");
       const data = await getGraphData(page.value.path);
+
+      if (currentGeneration !== loadGeneration) {
+        debug.log(TAG, "加载已被新请求取代，丢弃结果");
+        return;
+      }
 
       debug.log(TAG, "getGraphData 返回数据", {
         数据是否存在: !!data,
@@ -99,6 +106,8 @@ export function useGraphData() {
         throw new Error("获取的数据格式不正确");
       }
     } catch (err) {
+      if (currentGeneration !== loadGeneration) return;
+
       const errorMsg = err instanceof Error ? err.message : "未知错误";
       error.value = errorMsg;
       debug.error(TAG, "加载图谱数据失败", {
@@ -106,7 +115,6 @@ export function useGraphData() {
         重试次数: retryCount.value,
       });
 
-      // 重试逻辑
       if (retryCount.value < maxRetries) {
         retryCount.value++;
         const delay = 1000 * retryCount.value;
@@ -115,12 +123,13 @@ export function useGraphData() {
         });
         setTimeout(() => loadGraphData(), delay);
       } else {
-        // 设置空数据而不是保持加载状态
         mapData.value = { nodes: [], links: [] };
         debug.log(TAG, "达到最大重试次数，设置空数据");
       }
     } finally {
-      isLoading.value = false;
+      if (currentGeneration === loadGeneration) {
+        isLoading.value = false;
+      }
       debug.log(TAG, "数据加载完成", {
         成功: !error.value,
         错误信息: error.value,

@@ -11,7 +11,10 @@ export class DrawingManager {
   private transform: any;
   private hoveredNode: Node | null = null;
   private themeColors: ThemeColors;
-  private showLabels: boolean; // 新增：控制标签显示
+  private showLabels: boolean;
+  private nodes: Node[] = [];
+  private links: MapLink[] = [];
+  private nodeMap: Map<string, Node> = new Map();
 
   constructor(
     context: CanvasRenderingContext2D,
@@ -23,6 +26,13 @@ export class DrawingManager {
     this.themeColors = themeColors;
     this.transform = transform;
     this.showLabels = showLabels;
+  }
+
+  setData(nodes: Node[], links: MapLink[]): void {
+    this.nodes = nodes;
+    this.links = links;
+    this.nodeMap.clear();
+    nodes.forEach((n) => this.nodeMap.set(n.id, n));
   }
 
 
@@ -199,7 +209,20 @@ export class DrawingManager {
     const connectedNodes = new Set<Node>();
     if (!this.hoveredNode) return connectedNodes;
 
-    // 这里需要访问完整的links数据，需要在外部传入
+    for (const link of this.links) {
+      const sourceId = typeof link.source === "string" ? link.source : link.source.id;
+      const targetId = typeof link.target === "string" ? link.target : link.target.id;
+
+      if (sourceId === this.hoveredNode.id) {
+        const targetNode = this.nodeMap.get(targetId);
+        if (targetNode) connectedNodes.add(targetNode);
+      }
+      if (targetId === this.hoveredNode.id) {
+        const sourceNode = this.nodeMap.get(sourceId);
+        if (sourceNode) connectedNodes.add(sourceNode);
+      }
+    }
+
     return connectedNodes;
   }
 
@@ -224,8 +247,6 @@ export class DrawingManager {
   }
 
   private findNodeById(id: string): Node | undefined {
-    // 这里需要访问完整的nodes数据，需要在外部传入
-    console.warn("findNodeById 尚未实现")
-    return undefined;
+    return this.nodeMap.get(id);
   }
 }

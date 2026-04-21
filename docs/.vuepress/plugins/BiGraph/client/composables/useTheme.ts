@@ -13,6 +13,8 @@ export function useTheme() {
     cssVariableName: { accent: "", text: "" },
   });
 
+  let styleObserver: MutationObserver | null = null;
+
   function initThemeColors(): void {
     const root = getComputedStyle(document.documentElement);
 
@@ -42,7 +44,11 @@ export function useTheme() {
   }
 
   function setupThemeObserver(callback: () => void): MutationObserver {
-    const styleObserver = new MutationObserver(() => {
+    if (styleObserver) {
+      styleObserver.disconnect();
+    }
+
+    styleObserver = new MutationObserver(() => {
       const root = getComputedStyle(document.documentElement);
       let shouldUpdate = false;
       
@@ -79,6 +85,13 @@ export function useTheme() {
   }
 
   onMounted(initThemeColors);
+
+  onUnmounted(() => {
+    if (styleObserver) {
+      styleObserver.disconnect();
+      styleObserver = null;
+    }
+  });
 
   return {
     themeColors,
