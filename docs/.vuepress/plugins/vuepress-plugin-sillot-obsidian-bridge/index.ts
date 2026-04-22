@@ -25,6 +25,7 @@ export default (): Plugin => {
       await generateComponentProps(app, outputDir);
       await generateAuthors(app, outputDir);
       await generateInlineComponents(outputDir);
+      await generateAssetMap(app, outputDir);
       await generateVersion(outputDir);
       await generateVuepressConfigBundle(app, outputDir);
 
@@ -518,4 +519,74 @@ async function generateVuepressConfigBundle(app: App, outputDir: string) {
 
   await writeJSON(path.join(outputDir, "vuepress-config-bundle.json"), bundle);
   logger.log(`VuePress 配置包已生成，共 ${entries.length} 个配置项`);
+}
+
+// 附件扩展名集合
+const ASSET_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "bmp",
+  "mp4", "webm", "mp3", "ogg", "wav", "pdf", "zip",
+]);
+
+function isAssetFile(name: string): boolean {
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  return ASSET_EXTENSIONS.has(ext);
+}
+
+// 从构建产物文件名中剥离 Vite 哈希后缀，还原为源文件名
+// 例如: "2024-08-11--vscode1.81__icons-in-quick-pick-CasmsIBP.png" → "2024-08-11--vscode1.81__icons-in-quick-pick.png"
+function stripDistHash(distFileName: string): string | null {
+  const match = distFileName.match(/^(.+)-([a-zA-Z0-9_]{6,8})\.(\w+)$/);
+  if (!match) return null;
+  return `${match[1]}.${match[3]}`;
+}
+
+async function generateAssetMap(app: App, outputDir: string) {
+  const distAssetsDir = path.join(app.dir.dest(), "assets");
+  const sourceAssetsDir = path.join(app.dir.source(), "assets");
+
+  // 遍历 dist/assets，构建 源文件名 → 构建后文件名 的映射
+  const assetMap: Record<string, string> = {};
+
+  try {
+    const distFiles = await fsp.readdir(distAssetsDir);
+    for (const fileName of distFiles) {
+      if (!isAssetFile(fileName)) continue;
+      const originalName = stripDistHash(fileName);
+      if (originalName) {
+        assetMap[originalName] = fileName;
+      }
+    }
+  } catch {
+    logger.warn("无法读取 dist/assets 目录，生成空 asset-map");
+  }
+
+  // 遍历源 assets 目录，收集所有源文件（含子目录）
+  const sourceFiles: { name: string; relativePath: string }[] = [];
+  async function walkSourceDir(dir: string, prefix: string) {
+    try {
+      const items = await fsp.readdir(dir, { withFileTypes: true });
+      for (const item of items) {
+        if (item.name.startsWith(".")) continue;
+        const relPath = prefix ? `${prefix}/${item.name}` : item.name;
+        if (item.isDirectory()) {
+          await walkSourceDir(path.join(dir, item.name), relPath);
+        } else if (item.isFile() && isAssetFile(item.name)) {
+          sourceFiles.push({ name: item.name, relativePath: relPath });
+        }
+      }
+    } catch {
+      // 子目录可能不存在
+    }
+  }
+  await walkSourceDir(sourceAssetsDir, "");
+
+  await writeJSON(path.join(outputDir, "asset-map.json"), {
+    version: new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14),
+    buildTime: new Date().toISOString(),
+    count: Object.keys(assetMap).length,
+    sourceCount: sourceFiles.length,
+    map: assetMap,
+    sourceFiles,
+  });
+  logger.log(`附件映射已生成，${Object.keys(assetMap).length} 个映射，${sourceFiles.length} 个源文件`);
 }
