@@ -448,6 +448,8 @@ async function generateVuepressConfigBundle(app: App, outputDir: string) {
 
   const entries: ConfigFileEntry[] = [];
 
+  // 创建 .vuepress 目录结构
+  const vuepressEntries: ConfigFileEntry[] = [];
   try {
     const items = await fsp.readdir(vuepressDir, { withFileTypes: true });
 
@@ -460,7 +462,7 @@ async function generateVuepressConfigBundle(app: App, outputDir: string) {
         const itemFullPath = path.join(vuepressDir, item.name);
         const stat = await fsp.stat(itemFullPath);
         const content = await fsp.readFile(itemFullPath, "utf-8");
-        entries.push({
+        vuepressEntries.push({
           name: item.name,
           path: item.name,
           type: "file",
@@ -473,16 +475,17 @@ async function generateVuepressConfigBundle(app: App, outputDir: string) {
     logger.warn(`无法读取目录 ${vuepressDir}: ${err}`);
   }
 
-  // 添加 docs 目录下的重要文件：friends.md 和 README.md
+  // 创建 docs 目录结构
+  const docsEntries: ConfigFileEntry[] = [];
   const importantFiles = ["friends.md", "README.md"];
   for (const filename of importantFiles) {
     try {
       const filePath = path.join(docsDir, filename);
       const stat = await fsp.stat(filePath);
       const content = await fsp.readFile(filePath, "utf-8");
-      entries.push({
+      docsEntries.push({
         name: filename,
-        path: filename,
+        path: `docs/${filename}`,
         type: "file",
         size: stat.size,
         content,
@@ -491,6 +494,23 @@ async function generateVuepressConfigBundle(app: App, outputDir: string) {
       logger.warn(`无法读取 ${filename}: ${err}`);
     }
   }
+
+  // 将两类文件分别放在不同的目录结构中
+  entries.push({
+    name: ".vuepress",
+    path: ".vuepress",
+    type: "dir",
+    size: 0,
+    children: vuepressEntries,
+  });
+
+  entries.push({
+    name: "docs",
+    path: "docs",
+    type: "dir",
+    size: 0,
+    children: docsEntries,
+  });
 
   const bundle = {
     version: new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14),
