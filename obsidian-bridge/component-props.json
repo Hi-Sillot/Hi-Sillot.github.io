@@ -1,0 +1,114 @@
+{
+  "version": "1.0.0",
+  "components": [
+    {
+      "name": "GithubLabel",
+      "tag": "<GithubLabel",
+      "props": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "标签简写名称"
+        }
+      ],
+      "fallback": {
+        "tag": "span",
+        "class": "IssueLabel hx_IssueLabel IssueLabel--big lh-condensed js-label-link d-inline-block v-align-middle",
+        "styleFrom": "name"
+      }
+    },
+    {
+      "name": "VSCodeSettingsLink",
+      "tag": "<VSCodeSettingsLink",
+      "props": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "VSCode 设置项 ID"
+        }
+      ],
+      "fallback": {
+        "tag": "a",
+        "class": "vscode-settings-link inline",
+        "hrefPrefix": "vscode://settings/",
+        "hrefFrom": "id"
+      }
+    },
+    {
+      "name": "BannerTopArchived",
+      "tag": "<BannerTopArchived",
+      "props": [],
+      "fallback": {
+        "tag": "div",
+        "class": "sillot-banner-archived",
+        "staticContent": "📦 此项目已归档"
+      }
+    },
+    {
+      "name": "WebsiteCard",
+      "tag": "<WebsiteCard",
+      "props": [
+        {
+          "name": "url",
+          "type": "string",
+          "required": true,
+          "description": "网站 URL"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "description": "网站标题"
+        },
+        {
+          "name": "desc",
+          "type": "string",
+          "required": false,
+          "description": "网站描述"
+        }
+      ],
+      "fallback": {
+        "tag": "a",
+        "class": "sillot-website-card",
+        "hrefFrom": "url"
+      }
+    },
+    {
+      "name": "DirectoryLevel",
+      "tag": "<DirectoryLevel",
+      "props": [],
+      "fallback": {
+        "tag": "div",
+        "class": "sillot-directory-level"
+      }
+    },
+    {
+      "name": "IndexMe",
+      "tag": "<IndexMe",
+      "props": [],
+      "fallback": {
+        "tag": "div",
+        "class": "sillot-index-me"
+      }
+    },
+    {
+      "name": "C",
+      "tag": "<C",
+      "props": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "Cedoss 组件 ID"
+        }
+      ],
+      "fallback": {
+        "tag": "span",
+        "class": "sillot-cedoss-ref",
+        "contentFrom": "id"
+      }
+    }
+  ]
+}

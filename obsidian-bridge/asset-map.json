@@ -1,0 +1,97 @@
+{
+  "version": "20260422211532",
+  "buildTime": "2026-04-22T21:15:32.927Z",
+  "count": 19,
+  "sourceCount": 17,
+  "map": {
+    "2024-07-21-002329.png": "2024-07-21-002329-DBm1iDYK.png",
+    "2024-08-07--vscode1.82__diffEditor-collapsedCodeHeaders.gif": "2024-08-07--vscode1.82__diffEditor-collapsedCodeHeaders-CO4Od36v.gif",
+    "2024-08-07--vscode1.82__diffEditor-movedCodeDetection.gif": "2024-08-07--vscode1.82__diffEditor-movedCodeDetection-C6vd4bHg.gif",
+    "2024-08-07--vscode1.88__minimap-sections.png": "2024-08-07--vscode1.88__minimap-sections-5nLHSGms.png",
+    "2024-08-08--vscode1.85__multi-diff-editor-9.png": "2024-08-08--vscode1.85__multi-diff-editor-9-xuwvYt.png",
+    "2024-08-09--vscode1.66__independentColorPoolPerBracketTypeEnabled.png": "2024-08-09--vscode1.66__independentColorPoolPerBracketTypeEnabled-C7l1DvLV.png",
+    "2024-08-09--vscode1.66__inputboxseverity.png": "2024-08-09--vscode1.66__inputboxseverity-DMnuQ7gH.png",
+    "2024-08-09--vscode1.66__notification.png": "2024-08-09--vscode1.66__notification-DoSD1R2G.png",
+    "2024-08-09--vscode1.68__deprecated extensions.png": "2024-08-09--vscode1.68__deprecated extensions-uU0SThK_.png",
+    "2024-08-09--vscode1.72__search-tree-view.gif": "2024-08-09--vscode1.72__search-tree-view-Cznp7RhT.gif",
+    "2024-08-10--vscode1.73__exclude-folder-from-search.gif": "2024-08-10--vscode1.73__exclude-folder-from-search-Doh2jRun.gif",
+    "2024-08-10--vscode1.73__restrict-search-to-folder.gif": "2024-08-10--vscode1.73__restrict-search-to-folder-Cwta5MwC.gif",
+    "2024-08-11--vscode1.81__icons-in-quick-pick.png": "2024-08-11--vscode1.81__icons-in-quick-pick-CasmsIBP.png",
+    "Develocity.webp": "Develocity-DjjD2CIC.webp",
+    "houston.webp": "houston.webp",
+    "icon.ico": "icon.ico",
+    "icon.svg": "icon.svg",
+    "2024-08-07--vscode1.92__single-line changes.png": "2024-08-07--vscode1.92__single-line changes.png",
+    "2024-08-08--vscode1.85__multi-diff-editor.png": "2024-08-08--vscode1.85__multi-diff-editor.png"
+  },
+  "sourceFiles": [
+    {
+      "name": "houston.webp",
+      "relativePath": "houston.webp"
+    },
+    {
+      "name": "icon.ico",
+      "relativePath": "icon.ico"
+    },
+    {
+      "name": "icon.svg",
+      "relativePath": "icon.svg"
+    },
+    {
+      "name": "2024-07-21-002329.png",
+      "relativePath": "shots/2024-07-21-002329.png"
+    },
+    {
+      "name": "2024-08-07--vscode1.82__diffEditor-collapsedCodeHeaders.gif",
+      "relativePath": "shots/2024-08-07--vscode1.82__diffEditor-collapsedCodeHeaders.gif"
+    },
+    {
+      "name": "2024-08-07--vscode1.82__diffEditor-movedCodeDetection.gif",
+      "relativePath": "shots/2024-08-07--vscode1.82__diffEditor-movedCodeDetection.gif"
+    },
+    {
+      "name": "2024-08-07--vscode1.88__minimap-sections.png",
+      "relativePath": "shots/2024-08-07--vscode1.88__minimap-sections.png"
+    },
+    {
+      "name": "2024-08-07--vscode1.92__single-line changes.png",
+      "relativePath": "shots/2024-08-07--vscode1.92__single-line changes.png"
+    },
+    {
+      "name": "2024-08-08--vscode1.85__multi-diff-editor.png",
+      "relativePath": "shots/2024-08-08--vscode1.85__multi-diff-editor.png"
+    },
+    {
+      "name": "2024-08-09--vscode1.66__independentColorPoolPerBracketTypeEnabled.png",
+      "relativePath": "shots/2024-08-09--vscode1.66__independentColorPoolPerBracketTypeEnabled.png"
+    },
+    {
+      "name": "2024-08-09--vscode1.66__inputboxseverity.png",
+      "relativePath": "shots/2024-08-09--vscode1.66__inputboxseverity.png"
+    },
+    {
+      "name": "2024-08-09--vscode1.66__notification.png",
+      "relativePath": "shots/2024-08-09--vscode1.66__notification.png"
+    },
+    {
+      "name": "2024-08-09--vscode1.68__deprecated extensions.png",
+      "relativePath": "shots/2024-08-09--vscode1.68__deprecated extensions.png"
+    },
+    {
+      "name": "2024-08-09--vscode1.72__search-tree-view.gif",
+      "relativePath": "shots/2024-08-09--vscode1.72__search-tree-view.gif"
+    },
+    {
+      "name": "2024-08-10--vscode1.73__exclude-folder-from-search.gif",
+      "relativePath": "shots/2024-08-10--vscode1.73__exclude-folder-from-search.gif"
+    },
+    {
+      "name": "2024-08-10--vscode1.73__restrict-search-to-folder.gif",
+      "relativePath": "shots/2024-08-10--vscode1.73__restrict-search-to-folder.gif"
+    },
+    {
+      "name": "2024-08-11--vscode1.81__icons-in-quick-pick.png",
+      "relativePath": "shots/2024-08-11--vscode1.81__icons-in-quick-pick.png"
+    }
+  ]
+}

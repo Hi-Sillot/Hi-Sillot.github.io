@@ -1,0 +1,67 @@
+---
+url: /develop_notes/vdf5tsv8/index.md
+---
+\==这里列出作为参考，注意操作系统是 Windows==
+
+\==文件夹路径相关的需要根据实际情况修改；示例用户名需替换为实际用户名==
+
+\==用户级和系统级都是唯一的==
+
+:::: steps
+
+1. #### 缓存路径变量
+
+   \==是中文名系统账号时此项有用，因为中文名路径并不总是受支持==
+
+::: demo-wrapper title="中文名用户 的用户变量"
+
+```js
+// %SystemRoot% 系统会自动识别，也可以替换为具体路径
+TEMP=%SystemRoot%\\TEMP // 可以换成非系统级缓存路径
+TMP=%SystemRoot%\\TEMP // 同上，临时缓存路径
+```
+
+:::
+
+2. #### 特殊变量 Path 项
+
+::: demo-wrapper title="Administrator 的用户变量 > Path"
+
+```powershell
+C:\Users\Administrator\go\bin # [!code ++]
+C:\Users\Administrator\.deno\bin  # [!code ++] deno 可执行文件目录
+```
+
+:::
+
+::: demo-wrapper title="系统变量 > Path"
+
+```powershell
+C:\Program Files\GitHub CLI\ # [!code ++]
+C:\Users\Administrator\.g\bin  # [!code ++] go 版本管理工具 g
+D:\X-S01\nodejs\ # [!code ++]
+D:\X-S01\TortoiseGit\bin  # [!code ++] Git 工具，极少用到
+```
+
+:::
+
+3. #### 其他变量
+
+::: demo-wrapper title="Administrator 的用户变量 > Path"
+
+* `__SILLOT_PYTHON_PATH__`：值为 `D:\X-S01\conda3\envs\vsc\Scripts`，在 `vscode` 配置文件中被引用。
+* `GITHUB_TOKEN`：需谨慎使用，存储到变量意味着任何代码都可读取，一般在 `action` 中使用，无需在开发环境配置。
+* `GOROOT`：值为 `C:\Users\Administrator\.g\go`。
+* `G_MIRROR`：`https://golang.google.cn/dl/`。
+
+:::
+
+::: demo-wrapper title="系统变量 > Path"
+
+* `ANDROID_HOME`：值为 `C:\Users\Administrator\AppData\Local\Android\Sdk`，`Sillot-android` 开发需要。
+* `ANDROID_NDK_HOME`：值为 `C:\Users\Administrator\AppData\Local\Android\Sdk\ndk\25.2.9519653`，`Sillot-android` 开发需要。
+* `JAVA_HOME`：值为 `C:\Program Files\Microsoft\jdk-17.0.6.10-hotspot\`，`Sillot-android` 开发需要。
+
+:::
+
+::::

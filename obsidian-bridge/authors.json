@@ -1,0 +1,69 @@
+{
+  "version": "20260422211532",
+  "authors": {
+    "zhangsan": {
+      "name": "张三",
+      "slug": "zhangsan"
+    },
+    "lisi": {
+      "name": "李四",
+      "slug": "lisi"
+    },
+    "wangwu": {
+      "name": "王五",
+      "slug": "wangwu"
+    },
+    "nailong666": {
+      "name": "探索宇宙无敌奶龙",
+      "slug": "nailong666"
+    },
+    "nailong": {
+      "name": "我才是奶龙",
+      "slug": "nailong"
+    },
+    "nailongspa": {
+      "name": "奶龙SPA",
+      "slug": "nailongspa"
+    },
+    "nanbeilvdou": {
+      "name": "哈基米南北绿豆",
+      "slug": "nanbeilvdou"
+    },
+    "dingdongji": {
+      "name": "叮咚鸡叮咚鸡",
+      "slug": "dingdongji"
+    },
+    "dingdongji2": {
+      "name": "叮咚鸡叮咚鸡2",
+      "slug": "dingdongji2"
+    },
+    "dingdongji3": {
+      "name": "叮咚鸡叮咚鸡3",
+      "slug": "dingdongji3"
+    },
+    "dingdongji4": {
+      "name": "叮咚鸡叮咚鸡4",
+      "slug": "dingdongji4"
+    },
+    "dingdongji5": {
+      "name": "叮咚鸡叮咚鸡5",
+      "slug": "dingdongji5"
+    },
+    "dingdongji6": {
+      "name": "叮咚鸡叮咚鸡6",
+      "slug": "dingdongji6"
+    },
+    "dingdongji7": {
+      "name": "叮咚鸡叮咚鸡7",
+      "slug": "dingdongji7"
+    },
+    "dingdongji8": {
+      "name": "叮咚鸡叮咚鸡8",
+      "slug": "dingdongji8"
+    },
+    "dingdongji9": {
+      "name": "叮咚鸡叮咚鸡9",
+      "slug": "dingdongji9"
+    }
+  }
+}

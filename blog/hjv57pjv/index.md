@@ -1,0 +1,31 @@
+---
+url: /blog/hjv57pjv/index.md
+---
+我需要添加路径让windows识别其中的一个可执行程序，但是那个路径有其他的可执行程序会和其他地方的同名程序冲突，这个时候可以使用符号链接。
+
+1. 创建专用目录用于符号链接：
+
+```cmd
+mkdir C:\ProgramLinks
+```
+
+2. 创建符号链接（需要管理员权限）：
+
+::: tabs
+
+@tab CMD
+
+```cmd
+mklink "C:\ProgramLinks\program.exe" "C:\your\specific\path\program.exe"
+```
+
+@tab PowerShell
+
+```powershell
+# 创建符号链接
+New-Item -ItemType SymbolicLink -Path "C:\ProgramLinks\program.exe" -Target "C:\your\path\specific\program.exe"
+```
+
+:::
+
+3. 将 `C:\ProgramLinks` 添加到系统PATH环境变量

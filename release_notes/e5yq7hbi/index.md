@@ -1,0 +1,56 @@
+---
+url: /release_notes/e5yq7hbi/index.md
+---
+> 主要内容摘抄自 [VSCode 1.71 发行说明](https://code.visualstudio.com/updates/v1_71)，文中“我们”即 VSCode
+
+## [合并编辑器改进](https://code.visualstudio.com/updates/v1_71#_merge-editor-improvements)
+
+## [FFmpeg 编解码器支持](https://code.visualstudio.com/updates/v1_71#_ffmpeg-codecs-support)
+
+作为 VS Code 的一部分提供的 FFmpeg 共享库以前仅支持 FLAC 编解码器。在此版本中，库已更新为支持以下编解码器和容器列表。这将允许从笔记本播放更多音频和视频文件，或者通过扩展将音频和视频嵌入到 Web 视图中来播放。
+
+* Vorbis
+* Flac
+* H.264
+* VP8
+* WAV
+* MP3
+* Ogg
+
+## [编辑器粘性滚动](https://code.visualstudio.com/updates/v1_71#_sticky-scroll)
+
+## [新的代码操作控件](https://code.visualstudio.com/updates/v1_71#_new-code-action-control)
+
+## [终端流畅滚动](https://code.visualstudio.com/updates/v1_71#_smooth-scrolling)
+
+该终端现在支持平滑滚动，这将在短时间内动画滚动，以帮助您在滚动后查看您的位置，类似于编辑器和列表。要启用平滑滚动设置：
+
+```json
+"terminal.integrated.smoothScrolling": true
+```
+
+## [Live Preview](https://code.visualstudio.com/updates/v1_71#_live-preview)
+
+实时预览扩展现在正式支持多根工作区！尽管从技术上讲，用户以前可以在多根工作区中使用实时预览，但现在有一个更清晰的实现支持它。
+
+现在，实时预览扩展会为多根工作区中的每个根启动一个新服务器;因此，在预览多根工作区时，相对于项目根的链接（以 / 开头的链接）将正常工作。
+
+安装 [Live Preview](http://aka.ms/live-preview) 扩展程序并立即试用！📡✨🔎
+
+## [TerminalExitStatus.reason](https://code.visualstudio.com/updates/v1_71#_terminalexitstatusreason)
+
+扩展作者现在可以更好地了解终端通过新的 TerminalExitReason API 退出的原因。
+
+```ts
+export enum TerminalExitReason {
+  Unknown = 0,
+  Shutdown = 1,
+  Process = 2,
+  User = 3,
+  Extension = 4
+}
+```
+
+## [Electron 19 更新](https://code.visualstudio.com/updates/v1_71#_electron-19-update)
+
+在这个里程碑中，我们完成了将 Electron 19 捆绑到 VS Code 桌面的探索。此更新附带 Chromium 102.0.5005.167 和 Node.js 16.14.2

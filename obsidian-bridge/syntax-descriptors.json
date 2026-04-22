@@ -1,0 +1,86 @@
+{
+  "version": "1.0.0",
+  "syntaxes": [
+    {
+      "id": "container-info",
+      "pattern": "^::: info[\\s\\S]*?^:::",
+      "handler": "containerProcessor",
+      "fallbackRender": "div.hint-container.hint-container-info",
+      "props": {
+        "type": "info"
+      }
+    },
+    {
+      "id": "container-tip",
+      "pattern": "^::: tip[\\s\\S]*?^:::",
+      "handler": "containerProcessor",
+      "fallbackRender": "div.hint-container.hint-container-tip",
+      "props": {
+        "type": "tip"
+      }
+    },
+    {
+      "id": "container-warning",
+      "pattern": "^::: warning[\\s\\S]*?^:::",
+      "handler": "containerProcessor",
+      "fallbackRender": "div.hint-container.hint-container-warning",
+      "props": {
+        "type": "warning"
+      }
+    },
+    {
+      "id": "container-danger",
+      "pattern": "^::: danger[\\s\\S]*?^:::",
+      "handler": "containerProcessor",
+      "fallbackRender": "div.hint-container.hint-container-danger",
+      "props": {
+        "type": "danger"
+      }
+    },
+    {
+      "id": "container-details",
+      "pattern": "^::: details[\\s\\S]*?^:::",
+      "handler": "detailsProcessor",
+      "fallbackRender": "details.hint-container.hint-container-details",
+      "props": {
+        "type": "details"
+      }
+    },
+    {
+      "id": "tabs",
+      "pattern": "^::: tabs[\\s\\S]*?^:::",
+      "handler": "tabsProcessor",
+      "fallbackRender": "div.vp-tabs"
+    },
+    {
+      "id": "code-tabs",
+      "pattern": "^::: code-tabs[\\s\\S]*?^:::",
+      "handler": "codeTabsProcessor",
+      "fallbackRender": "div.vp-code-tabs"
+    },
+    {
+      "id": "cedoss",
+      "pattern": "^::: cedoss[\\s\\S]*?^:::",
+      "handler": "cedossProcessor",
+      "fallbackRender": "div.sillot-cedoss"
+    },
+    {
+      "id": "video-tabs",
+      "pattern": "<!--\\s*sillot-video-tabs[\\s\\S]*?-->",
+      "handler": "videoTabsProcessor",
+      "fallbackRender": "div.sillot-video-tabs"
+    },
+    {
+      "id": "github-label",
+      "pattern": "<GithubLabel[^>]*>",
+      "handler": "githubLabelProcessor",
+      "fallbackRender": "span.sillot-github-label"
+    },
+    {
+      "id": "vscode-settings-link",
+      "pattern": "<VSCodeSettingsLink[^>]*>",
+      "handler": "vscodeSettingsLinkProcessor",
+      "fallbackRender": "a.sillot-vscode-link"
+    }
+  ]
+}

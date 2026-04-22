@@ -1,0 +1,13 @@
+---
+url: /release_notes/fw1epg2w/index.md
+---
+> 主要内容摘抄自 [VSCode 1.101 发行说明](https://vscode.js.cn/updates/v1_101)，文中“我们”即 VSCode
+
+## [边输入边查找](https://vscode.js.cn/updates/v1_101#_find-as-you-type)
+
+设置：&#x20;
+边输入边查找一直是查找控件的默认行为，但现在您可以控制是否保持这种方式或禁用它，以便它只在按 Enter 后执行搜索。
+
+## [未发布的扩展程序警告](https://vscode.js.cn/updates/v1_101#_unpublished-extension-warning)
+
+当已安装的扩展程序不再在 Marketplace 中可用时，现在会显示警告指示器，帮助您识别可能已取消发布或删除的问题扩展程序。

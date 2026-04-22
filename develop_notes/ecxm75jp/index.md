@@ -1,0 +1,14 @@
+---
+url: /develop_notes/ecxm75jp/index.md
+---
+1. 汐洛绞架（规划中）
+2. [VSCode](https://marketplace.visualstudio.com/items?itemName=Hi-Windom.sillot)
+3. Vuepress（本站内置）
+4. Obsidian（早期开发中）
+5. Android Studio（规划中）
+6. Chromium 浏览器（维护中）
+7. Firefox 浏览器（规划中）
+8. Utools（规划中）
+9. rubick（规划中）
+10. \~~KeePass 2（KeePass已被弃用）~~
+11. Jupyter Lab（规划中）

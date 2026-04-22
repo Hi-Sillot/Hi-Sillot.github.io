@@ -1,0 +1,3 @@
+Sitemap: https://sillot.hwd.deno.net/sitemap.xml
+User-agent:*
+Disallow:
