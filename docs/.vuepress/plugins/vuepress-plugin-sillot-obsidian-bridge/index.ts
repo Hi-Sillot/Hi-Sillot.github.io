@@ -443,6 +443,7 @@ interface ConfigFileEntry {
 
 async function generateVuepressConfigBundle(app: App, outputDir: string) {
   const vuepressDir = path.join(app.dir.source(), ".vuepress");
+  const docsDir = app.dir.source();
   const excludePatterns = ["node_modules", ".cache", ".temp", "dist", "plugins", "components", "layouts", "styles", "utils", "modules"];
 
   const entries: ConfigFileEntry[] = [];
@@ -470,6 +471,25 @@ async function generateVuepressConfigBundle(app: App, outputDir: string) {
     }
   } catch (err) {
     logger.warn(`无法读取目录 ${vuepressDir}: ${err}`);
+  }
+
+  // 添加 docs 目录下的重要文件：friends.md 和 README.md
+  const importantFiles = ["friends.md", "README.md"];
+  for (const filename of importantFiles) {
+    try {
+      const filePath = path.join(docsDir, filename);
+      const stat = await fsp.stat(filePath);
+      const content = await fsp.readFile(filePath, "utf-8");
+      entries.push({
+        name: filename,
+        path: filename,
+        type: "file",
+        size: stat.size,
+        content,
+      });
+    } catch (err) {
+      logger.warn(`无法读取 ${filename}: ${err}`);
+    }
   }
 
   const bundle = {
