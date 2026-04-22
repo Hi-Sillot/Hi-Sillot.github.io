@@ -545,7 +545,7 @@ async function generateAssetMap(app: App, outputDir: string) {
   const sourceAssetsDir = path.join(app.dir.source(), "assets");
 
   // 遍历 dist/assets，构建 源文件名 → 构建后文件名 的映射
-  const assetMap: Record<string, string> = {};
+  const distMap: Record<string, string> = {};
 
   try {
     const distFiles = await fsp.readdir(distAssetsDir);
@@ -553,7 +553,7 @@ async function generateAssetMap(app: App, outputDir: string) {
       if (!isAssetFile(fileName)) continue;
       const originalName = stripDistHash(fileName);
       if (originalName) {
-        assetMap[originalName] = fileName;
+        distMap[originalName] = fileName;
       }
     }
   } catch {
@@ -580,6 +580,25 @@ async function generateAssetMap(app: App, outputDir: string) {
   }
   await walkSourceDir(sourceAssetsDir, "");
 
+  // 构建完整映射：dist 中有的用哈希名，没有的映射到自身并复制到 dist
+  const assetMap: Record<string, string> = { ...distMap };
+  let copiedCount = 0;
+
+  for (const sf of sourceFiles) {
+    if (!(sf.name in assetMap)) {
+      assetMap[sf.name] = sf.name;
+      // 复制源文件到 dist/assets 使其可在线访问
+      const srcPath = path.join(sourceAssetsDir, sf.relativePath);
+      const destPath = path.join(distAssetsDir, sf.name);
+      try {
+        await fsp.copyFile(srcPath, destPath);
+        copiedCount++;
+      } catch {
+        logger.warn(`无法复制 ${sf.relativePath} 到 dist/assets`);
+      }
+    }
+  }
+
   await writeJSON(path.join(outputDir, "asset-map.json"), {
     version: new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14),
     buildTime: new Date().toISOString(),
@@ -588,5 +607,5 @@ async function generateAssetMap(app: App, outputDir: string) {
     map: assetMap,
     sourceFiles,
   });
-  logger.log(`附件映射已生成，${Object.keys(assetMap).length} 个映射，${sourceFiles.length} 个源文件`);
+  logger.log(`附件映射已生成，${Object.keys(assetMap).length} 个映射，${sourceFiles.length} 个源文件，${copiedCount} 个文件已复制到 dist`);
 }
