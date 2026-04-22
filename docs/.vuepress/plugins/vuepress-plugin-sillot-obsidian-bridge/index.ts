@@ -26,6 +26,7 @@ export default (): Plugin => {
       await generateAuthors(app, outputDir);
       await generateInlineComponents(outputDir);
       await generateVersion(outputDir);
+      await generateVuepressConfigBundle(app, outputDir);
 
       logger.log("Bridge 产物已生成:", outputDir);
     },
@@ -429,4 +430,57 @@ async function generateInlineComponents(outputDir: string) {
     vscodeSvg: VSCODE_SVG,
     cedossMap: CEDOSS_MAP,
   });
+}
+
+interface ConfigFileEntry {
+  name: string;
+  path: string;
+  type: "file" | "dir";
+  size: number;
+  content?: string;
+  children?: ConfigFileEntry[];
+}
+
+async function generateVuepressConfigBundle(app: App, outputDir: string) {
+  const vuepressDir = path.join(app.dir.source(), ".vuepress");
+  const excludePatterns = ["node_modules", ".cache", ".temp", "dist", "plugins", "components", "layouts", "styles", "utils", "modules"];
+
+  const entries: ConfigFileEntry[] = [];
+
+  try {
+    const items = await fsp.readdir(vuepressDir, { withFileTypes: true });
+
+    for (const item of items) {
+      if (item.name.startsWith(".") || excludePatterns.includes(item.name)) continue;
+      if (!item.isFile()) continue;
+
+      const ext = path.extname(item.name);
+      if ([".ts", ".js", ".json", ".yaml", ".yml"].includes(ext)) {
+        const itemFullPath = path.join(vuepressDir, item.name);
+        const stat = await fsp.stat(itemFullPath);
+        const content = await fsp.readFile(itemFullPath, "utf-8");
+        entries.push({
+          name: item.name,
+          path: item.name,
+          type: "file",
+          size: stat.size,
+          content,
+        });
+      }
+    }
+  } catch (err) {
+    logger.warn(`无法读取目录 ${vuepressDir}: ${err}`);
+  }
+
+  const bundle = {
+    version: new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14),
+    buildTime: new Date().toISOString(),
+    docsRepo: "Hi-Sillot/Hi-Sillot.github.io",
+    docsBranch: "main",
+    vuepressDir: ".vuepress",
+    files: entries,
+  };
+
+  await writeJSON(path.join(outputDir, "vuepress-config-bundle.json"), bundle);
+  logger.log(`VuePress 配置包已生成，共 ${entries.length} 个配置项`);
 }
