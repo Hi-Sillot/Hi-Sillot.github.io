@@ -458,13 +458,13 @@ async function generateVuepressConfigBundle(app: App, outputDir: string) {
       if (!item.isFile()) continue;
 
       const ext = path.extname(item.name);
-      if ([".ts", ".js", ".json", ".yaml", ".yml"].includes(ext)) {
+      if ([ ".ts", ".js", ".json", ".yaml", ".yml" ].includes(ext)) {
         const itemFullPath = path.join(vuepressDir, item.name);
         const stat = await fsp.stat(itemFullPath);
         const content = await fsp.readFile(itemFullPath, "utf-8");
         vuepressEntries.push({
           name: item.name,
-          path: item.name,
+          path: `.vuepress/${item.name}`, // GitHub 路径：.vuepress/config.ts 等
           type: "file",
           size: stat.size,
           content,
@@ -475,7 +475,7 @@ async function generateVuepressConfigBundle(app: App, outputDir: string) {
     logger.warn(`无法读取目录 ${vuepressDir}: ${err}`);
   }
 
-  // 创建 docs 目录结构
+  // 创建 docs 根目录文件结构
   const docsEntries: ConfigFileEntry[] = [];
   const importantFiles = ["friends.md", "README.md"];
   for (const filename of importantFiles) {
@@ -485,32 +485,27 @@ async function generateVuepressConfigBundle(app: App, outputDir: string) {
       const content = await fsp.readFile(filePath, "utf-8");
       docsEntries.push({
         name: filename,
-        path: `docs/${filename}`,
+        path: filename, // GitHub 路径：friends.md、README.md 等
         type: "file",
         size: stat.size,
         content,
       });
+      logger.log(`已包含文件: ${filename}, 大小: ${stat.size} 字节`);
     } catch (err) {
       logger.warn(`无法读取 ${filename}: ${err}`);
     }
   }
 
-  // 将两类文件分别放在不同的目录结构中
-  entries.push({
-    name: ".vuepress",
-    path: ".vuepress",
-    type: "dir",
-    size: 0,
-    children: vuepressEntries,
-  });
-
-  entries.push({
-    name: "docs",
-    path: "docs",
-    type: "dir",
-    size: 0,
-    children: docsEntries,
-  });
+  // 将所有文件放在根目录下，不创建额外的目录结构
+  // .vuepress 目录下的文件
+  for (const entry of vuepressEntries) {
+    entries.push(entry);
+  }
+  
+  // docs 根目录下的重要文件
+  for (const entry of docsEntries) {
+    entries.push(entry);
+  }
 
   const bundle = {
     version: new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14),
