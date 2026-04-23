@@ -15,6 +15,6 @@ config:
     hero:
       name: 🦢
       tagline: hi~Sillot
-      text: 汐洛无处不在
+      text: 汐洛无处不在~
       actions:
 ---
