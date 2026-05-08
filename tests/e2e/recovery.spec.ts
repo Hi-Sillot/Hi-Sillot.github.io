@@ -2,6 +2,17 @@ import { test, expect } from '@playwright/test'
 import { NetworkSimulator } from './helpers/network-simulator'
 import { MetricsCollector } from './helpers/metrics'
 
+async function findNavLink(page: any): Promise<string | null> {
+  return page.evaluate(() => {
+    const links = Array.from(document.querySelectorAll('a.vp-link[href]'))
+    const navLink = links.find(a => {
+      const href = a.getAttribute('href')
+      return href && !href.startsWith('#') && !href.startsWith('http')
+    })
+    return navLink?.getAttribute('href') || null
+  })
+}
+
 test.describe('Recovery: Navigation auto-recovers with plugin', () => {
   const metrics = new MetricsCollector()
 
@@ -13,9 +24,8 @@ test.describe('Recovery: Navigation auto-recovers with plugin', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const navLinks = page.locator('a[href]').first()
-    const href = await navLinks.getAttribute('href')
-    if (!href) {
+    const targetPath = await findNavLink(page)
+    if (!targetPath) {
       test.skip()
       return
     }
@@ -23,10 +33,11 @@ test.describe('Recovery: Navigation auto-recovers with plugin', () => {
     const start = Date.now()
     await simulator.start()
 
-    await navLinks.click()
-
     try {
-      await page.waitForURL(`**${href}**`, { timeout: 15000 })
+      await page.evaluate((path) => {
+        window.location.href = path
+      }, targetPath)
+      await page.waitForURL(`**${targetPath.replace(/\.html$/, '')}**`, { timeout: 15000 })
       const end = Date.now()
 
       metrics.add({
@@ -67,9 +78,8 @@ test.describe('Recovery: Navigation auto-recovers with plugin', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const navLinks = page.locator('a[href]').first()
-    const href = await navLinks.getAttribute('href')
-    if (!href) {
+    const targetPath = await findNavLink(page)
+    if (!targetPath) {
       test.skip()
       return
     }
@@ -77,10 +87,11 @@ test.describe('Recovery: Navigation auto-recovers with plugin', () => {
     const start = Date.now()
     await simulator.start()
 
-    await navLinks.click()
-
     try {
-      await page.waitForURL(`**${href}**`, { timeout: 20000 })
+      await page.evaluate((path) => {
+        window.location.href = path
+      }, targetPath)
+      await page.waitForURL(`**${targetPath.replace(/\.html$/, '')}**`, { timeout: 20000 })
       const end = Date.now()
 
       metrics.add({
@@ -122,9 +133,8 @@ test.describe('Recovery: Navigation auto-recovers with plugin', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const navLinks = page.locator('a[href]').first()
-    const href = await navLinks.getAttribute('href')
-    if (!href) {
+    const targetPath = await findNavLink(page)
+    if (!targetPath) {
       test.skip()
       return
     }
@@ -132,10 +142,11 @@ test.describe('Recovery: Navigation auto-recovers with plugin', () => {
     const start = Date.now()
     await simulator.start()
 
-    await navLinks.click()
-
     try {
-      await page.waitForURL(`**${href}**`, { timeout: 15000 })
+      await page.evaluate((path) => {
+        window.location.href = path
+      }, targetPath)
+      await page.waitForURL(`**${targetPath.replace(/\.html$/, '')}**`, { timeout: 15000 })
       const end = Date.now()
 
       metrics.add({

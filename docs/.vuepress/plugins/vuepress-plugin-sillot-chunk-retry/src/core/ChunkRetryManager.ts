@@ -8,6 +8,8 @@ const DEFAULT_OPTIONS: Required<ChunkRetryOptions> = {
   retryKey: 'chunk-retry-attempted',
 }
 
+const isClient = typeof window !== 'undefined'
+
 export class ChunkRetryManager {
   private router: RouterLike
   private options: Required<ChunkRetryOptions>
@@ -21,6 +23,8 @@ export class ChunkRetryManager {
   }
 
   init(): void {
+    if (!isClient) return
+
     this.router.beforeEach((to: RouteLocationNormalized) => {
       this.pendingTarget = to
     })

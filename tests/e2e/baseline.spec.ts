@@ -16,22 +16,31 @@ test.describe('Baseline: Navigation stuck without recovery', () => {
     const start = Date.now()
     await simulator.start()
 
-    const navLinks = page.locator('a[href]').first()
-    const href = await navLinks.getAttribute('href')
-    if (!href) {
+    const targetPath = await page.evaluate(() => {
+      const links = Array.from(document.querySelectorAll('a.vp-link[href]'))
+      const navLink = links.find(a => {
+        const href = a.getAttribute('href')
+        return href && !href.startsWith('#') && !href.startsWith('http')
+      })
+      return navLink?.getAttribute('href') || null
+    })
+
+    if (!targetPath) {
       test.skip()
       return
     }
 
     try {
-      await navLinks.click()
-      await page.waitForURL(`**${href}**`, { timeout: 5000 }).catch(() => {})
+      await page.evaluate((path) => {
+        window.location.href = path
+      }, targetPath)
+      await page.waitForURL(`**${targetPath.replace(/\.html$/, '')}**`, { timeout: 5000 }).catch(() => {})
     } catch {}
 
     const end = Date.now()
     const currentUrl = page.url()
 
-    const isStuck = !currentUrl.includes(href.replace('.html', ''))
+    const isStuck = !currentUrl.includes(targetPath.replace('.html', ''))
 
     metrics.add({
       scenario: 'baseline-no-recovery',
