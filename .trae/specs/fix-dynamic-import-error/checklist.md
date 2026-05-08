@@ -1,12 +1,24 @@
-- [ ] useChunkErrorRecovery 组合函数已创建
-- [ ] router.beforeEach 正确跟踪 pendingTarget
-- [ ] router.afterEach 正确清除 pendingTarget 和 sessionStorage 标记
-- [ ] vite:preloadError 事件监听器已添加，能提取失败 URL
-- [ ] 缓存破坏重导入逻辑已实现（URL 添加 ?t=timestamp 参数）
-- [ ] vite:preloadError 回调中调用了 event.preventDefault()
-- [ ] router.onError 处理器已添加，能正确识别动态导入失败错误
-- [ ] 第一层恢复（无刷新）已实现：缓存破坏重导入 → 更新路由组件 → 重试导航
-- [ ] 第二层兜底已实现：location.href 定向导航到目标页面
-- [ ] sessionStorage 防循环标记逻辑已实现
-- [ ] client.ts 中已集成 useChunkErrorRecovery
-- [ ] 代码无 TypeScript 类型错误
+- [x] 插件目录 `vuepress-plugin-sillot-chunk-retry` 已创建，遵循项目现有插件命名规范
+- [x] 插件入口 `index.ts` 导出 VuePress Plugin 对象，包含 name 和 clientConfigFile
+- [x] 客户端入口 `client.ts` 使用 defineClientConfig 初始化 ChunkRetryManager
+- [x] ChunkRetryManager 类已创建，框架无关，可独立测试
+- [x] router.beforeEach 正确跟踪 pendingTarget
+- [x] router.afterEach 正确清除 pendingTarget 和 sessionStorage 标记
+- [x] vite:preloadError 事件监听器已添加，能提取失败 URL
+- [x] 缓存破坏重导入逻辑已实现（URL 添加 ?t=timestamp 参数）
+- [x] vite:preloadError 回调中调用了 event.preventDefault()
+- [x] router.onError 处理器已添加，能正确识别动态导入失败错误
+- [x] 第一层恢复（无刷新）已实现：缓存破坏重导入 → 更新路由组件 → 重试导航
+- [x] 第二层兜底已实现：location.href 定向导航到目标页面
+- [x] sessionStorage 防循环标记逻辑已实现
+- [x] ChunkRetryManager 单元测试通过（URL 提取、错误识别、防循环）
+- [x] config.plugins.ts 中已注册 vuepress-plugin-sillot-chunk-retry 插件
+- [x] client.ts 中无手动初始化代码（由插件自动初始化）
+- [x] Playwright 已安装，playwright.config.ts 已创建
+- [x] 网络波动模拟辅助工具已创建
+- [x] 基准测试通过：无插件时导航卡住可被检测到
+- [x] 恢复测试通过：有插件时导航自动恢复成功
+- [x] 多场景测试通过：单次瞬时失败、连续多次失败、部分 chunk 失败
+- [x] 量化指标可采集：恢复成功率、恢复耗时
+- [x] package.json 中有 test:e2e 脚本
+- [x] 代码无 TypeScript 类型错误

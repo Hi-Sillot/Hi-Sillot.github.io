@@ -8,6 +8,7 @@ import SiteDesign from "./plugins/vuepress-plugin-sillot-site-design";
 import SillotBlockPlugin from "./plugins/vuepress-plugin-sillot-block";
 import vuepressPluginSillotCedoss from "./plugins/vuepress-plugin-sillot-cedoss";
 import ObsidianBridgePlugin from "./plugins/vuepress-plugin-sillot-obsidian-bridge";
+import ChunkRetryPlugin from "./plugins/vuepress-plugin-sillot-chunk-retry";
 import { Jieba } from "@node-rs/jieba";
 import { dict } from "@node-rs/jieba/dict.js";
 
@@ -15,6 +16,7 @@ import { dict } from "@node-rs/jieba/dict.js";
 const jieba = Jieba.withDict(dict);
 
 export default [
+  ChunkRetryPlugin(),
   vuepressPluginSillotCedoss(),
   // 注册Sillot标签插件（传入自定义配置）
   SillotBlockPlugin({
