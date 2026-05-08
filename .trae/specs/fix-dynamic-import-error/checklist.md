@@ -1,0 +1,8 @@
+- [ ] vite:preloadError 事件监听器已添加，动态导入失败时自动刷新页面
+- [ ] vite:preloadError 回调中调用了 event.preventDefault() 阻止默认错误
+- [ ] 防抖逻辑已实现，避免短时间内多次刷新
+- [ ] Vue Router onError 处理已添加，捕获路由导航中的动态导入错误
+- [ ] Router onError 中正确判断错误类型为动态导入失败
+- [ ] Router onError 中使用 window.location.href 进行完整页面加载而非 SPA 导航
+- [ ] chunkFileNames 配置已添加，避免文件名包含广告/追踪关键词
+- [ ] 代码无 TypeScript 类型错误
