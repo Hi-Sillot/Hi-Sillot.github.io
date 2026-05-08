@@ -8,14 +8,15 @@ const DEFAULT_OPTIONS: Required<ChunkRetryOptions> = {
   retryKey: 'chunk-retry-attempted',
 }
 
-const isClient = typeof window !== 'undefined'
-
 export class ChunkRetryManager {
   private router: RouterLike
   private options: Required<ChunkRetryOptions>
   private pendingTarget: RouteLocationNormalized | null = null
+  private pendingRecovery: Promise<void> | null = null
   private retryCount = 0
   private isRecovering = false
+  private prefetchPromise: Promise<any> | null = null
+  private prefetchUrl: string | null = null
 
   constructor(router: RouterLike, options: ChunkRetryOptions = {}) {
     this.router = router
@@ -23,7 +24,7 @@ export class ChunkRetryManager {
   }
 
   init(): void {
-    if (!isClient) return
+    if (typeof window === 'undefined') return
 
     this.router.beforeEach((to: RouteLocationNormalized) => {
       this.pendingTarget = to
@@ -33,6 +34,8 @@ export class ChunkRetryManager {
       this.pendingTarget = null
       this.retryCount = 0
       this.isRecovering = false
+      this.prefetchPromise = null
+      this.prefetchUrl = null
       sessionStorage.removeItem(this.options.retryKey)
     })
 
@@ -48,14 +51,21 @@ export class ChunkRetryManager {
     const failedUrl = extractFailedUrl(error)
     if (!failedUrl) return
 
-    event.preventDefault()
-
-    this.retryImportWithCacheBusting(failedUrl).catch(() => {})
+    if (!this.prefetchUrl || this.prefetchUrl !== failedUrl) {
+      this.prefetchUrl = failedUrl
+      this.prefetchPromise = this.retryImportWithCacheBusting(failedUrl).catch(() => null)
+    }
   }
 
   private handleRouterError(error: Error, to: RouteLocationNormalized): void {
     if (!isDynamicImportError(error)) return
-    if (this.isRecovering) return
+
+    if (this.isRecovering) {
+      if (this.pendingRecovery) {
+        this.pendingRecovery.catch(() => this.fallbackNavigation(to))
+      }
+      return
+    }
     if (sessionStorage.getItem(this.options.retryKey)) return
 
     this.isRecovering = true
@@ -64,7 +74,8 @@ export class ChunkRetryManager {
     const failedUrl = extractFailedUrl(error)
 
     if (failedUrl && this.retryCount < this.options.maxRetries) {
-      this.recoverWithCacheBusting(failedUrl, to)
+      this.pendingRecovery = this.recoverWithCacheBusting(failedUrl, to)
+      this.pendingRecovery.finally(() => { this.pendingRecovery = null })
     } else {
       this.fallbackNavigation(to)
     }
@@ -72,15 +83,27 @@ export class ChunkRetryManager {
 
   private async recoverWithCacheBusting(failedUrl: string, to: RouteLocationNormalized): Promise<void> {
     try {
-      const module = await this.retryImportWithCacheBusting(failedUrl)
+      let module: any
+
+      if (this.prefetchPromise && this.prefetchUrl === failedUrl) {
+        module = await this.prefetchPromise
+        this.prefetchPromise = null
+        this.prefetchUrl = null
+      }
+
+      if (!module) {
+        module = await this.retryImportWithCacheBusting(failedUrl)
+      }
+
       await this.updateRouteAndRetry(to, module)
     } catch {
       this.retryCount++
       if (this.retryCount < this.options.maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, this.options.retryDelay * this.retryCount))
+        const delay = this.options.retryDelay * this.retryCount
+        await new Promise(resolve => setTimeout(resolve, delay))
         this.isRecovering = false
         sessionStorage.removeItem(this.options.retryKey)
-        this.recoverWithCacheBusting(failedUrl, to)
+        await this.recoverWithCacheBusting(failedUrl, to)
       } else {
         this.fallbackNavigation(to)
       }
@@ -95,6 +118,7 @@ export class ChunkRetryManager {
 
   private async updateRouteAndRetry(to: RouteLocationNormalized, module: any): Promise<void> {
     const targetName = to.name
+
     if (!targetName) {
       this.fallbackNavigation(to)
       return
@@ -108,16 +132,22 @@ export class ChunkRetryManager {
       return
     }
 
-    this.router.removeRoute(targetName)
-
-    this.router.addRoute({
+    const routeConfig = {
       path: matchedRoute.path,
       name: matchedRoute.name,
       component: module.default || module,
       meta: matchedRoute.meta || {},
-    })
+      props: matchedRoute.props ?? true,
+    }
 
-    await this.router.push(to.fullPath)
+    this.router.removeRoute(targetName)
+    this.router.addRoute(routeConfig)
+
+    try {
+      await this.router.push(to.fullPath)
+    } catch {
+      this.fallbackNavigation(to)
+    }
   }
 
   private fallbackNavigation(to: RouteLocationNormalized): void {

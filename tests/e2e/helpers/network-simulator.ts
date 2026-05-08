@@ -4,18 +4,22 @@ interface NetworkSimulatorOptions {
   failurePattern?: RegExp
   failCount?: number
   failDelay?: number
+  intermittentPattern?: number[]
 }
 
 export class NetworkSimulator {
   private page: Page
-  private options: Required<NetworkSimulatorOptions>
+  private options: Required<Omit<NetworkSimulatorOptions, 'intermittentPattern'>>
+  private intermittentPattern: number[] | undefined
   private currentFailCount = 0
-  private interceptedRequests: Array<{ url: string; timestamp: number }> = []
+  private totalRequestCount = 0
+  private interceptedRequests: Array<{ url: string; timestamp: number; failed: boolean }> = []
 
   constructor(page: Page, options: NetworkSimulatorOptions = {}) {
     this.page = page
+    this.intermittentPattern = options.intermittentPattern
     this.options = {
-      failurePattern: /assets\/.*\.js$/,
+      failurePattern: options.failurePattern ?? /assets\/.*\.js$/,
       failCount: options.failCount ?? 1,
       failDelay: options.failDelay ?? 0,
     }
@@ -23,12 +27,18 @@ export class NetworkSimulator {
 
   async start(): Promise<void> {
     await this.page.route(this.options.failurePattern, async (route: Route) => {
+      this.totalRequestCount++
+      const shouldFail = this.intermittentPattern
+        ? this.intermittentPattern.includes(this.totalRequestCount)
+        : this.currentFailCount < this.options.failCount
+
       this.interceptedRequests.push({
         url: route.request().url(),
         timestamp: Date.now(),
+        failed: shouldFail,
       })
 
-      if (this.currentFailCount < this.options.failCount) {
+      if (shouldFail) {
         this.currentFailCount++
         if (this.options.failDelay > 0) {
           await new Promise(resolve => setTimeout(resolve, this.options.failDelay))
@@ -43,6 +53,8 @@ export class NetworkSimulator {
   async stop(): Promise<void> {
     await this.page.unroute(this.options.failurePattern)
     this.currentFailCount = 0
+    this.totalRequestCount = 0
+    this.interceptedRequests = []
   }
 
   getInterceptedRequests() {
@@ -51,5 +63,9 @@ export class NetworkSimulator {
 
   getFailedCount() {
     return this.currentFailCount
+  }
+
+  getTotalRequestCount() {
+    return this.totalRequestCount
   }
 }

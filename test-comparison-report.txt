@@ -1,30 +1,60 @@
 === Chunk Retry Plugin A/B Comparison Test Report ===
-Date: 2026-05-08T20:38:27.981Z
+Date: 2026-05-08T22:23:23.073Z
 
 --- Phase A: WITHOUT plugin ---
-  [single-transient-no-plugin] FAIL | recovery=15570ms
-  [single-transient-no-plugin] FAIL | recovery=15570ms
-  [consecutive-no-plugin] FAIL | recovery=20551ms
-  [single-transient-no-plugin] FAIL | recovery=15570ms
-  [consecutive-no-plugin] FAIL | recovery=20551ms
+  [single-transient-no-plugin] FAIL | recovery=15554ms
+  [single-transient-no-plugin] FAIL | recovery=15554ms
+  [consecutive-no-plugin] FAIL | recovery=20594ms
+  [single-transient-no-plugin] FAIL | recovery=15554ms
+  [consecutive-no-plugin] FAIL | recovery=20594ms
+  [boundary-retry-no-plugin] FAIL | recovery=30549ms
+  [single-transient-no-plugin] FAIL | recovery=15554ms
+  [consecutive-no-plugin] FAIL | recovery=20594ms
+  [boundary-retry-no-plugin] FAIL | recovery=30549ms
   [persistent-no-plugin] FAIL | recovery=0ms
+  [single-transient-no-plugin] FAIL | recovery=15554ms
+  [consecutive-no-plugin] FAIL | recovery=20594ms
+  [boundary-retry-no-plugin] FAIL | recovery=30549ms
+  [persistent-no-plugin] FAIL | recovery=0ms
+  [multi-page-no-plugin] FAIL | recovery=15442ms
+  [single-transient-no-plugin] FAIL | recovery=15554ms
+  [consecutive-no-plugin] FAIL | recovery=20594ms
+  [boundary-retry-no-plugin] FAIL | recovery=30549ms
+  [persistent-no-plugin] FAIL | recovery=0ms
+  [multi-page-no-plugin] FAIL | recovery=15442ms
+  [exceed-max-retries-no-plugin] FAIL | recovery=0ms
 
 --- Phase B: WITH plugin ---
-  [single-transient-with-plugin] PASS | recovery=546ms
-  [single-transient-with-plugin] PASS | recovery=546ms
-  [consecutive-with-plugin] PASS | recovery=536ms
-  [single-transient-with-plugin] PASS | recovery=546ms
-  [consecutive-with-plugin] PASS | recovery=536ms
+  [single-transient-with-plugin] FAIL | recovery=0ms
+  [consecutive-with-plugin] FAIL | recovery=0ms
+  [boundary-retry-with-plugin] FAIL | recovery=0ms
   [persistent-with-plugin] FAIL | recovery=0ms
+  [persistent-with-plugin] FAIL | recovery=0ms
+  [multi-page-with-plugin] FAIL | recovery=0ms
+  [persistent-with-plugin] FAIL | recovery=0ms
+  [multi-page-with-plugin] FAIL | recovery=0ms
+  [non-chunk-css-with-plugin] FAIL | recovery=0ms
+  [intermittent-with-plugin] FAIL | recovery=0ms
+  [rapid-back-to-back-with-plugin] FAIL | recovery=20855ms
+  [recovery-then-home-with-plugin] FAIL | recovery=0ms
+  [recovery-then-home-with-plugin] FAIL | recovery=0ms
+  [delayed-failure-with-plugin] FAIL | recovery=0ms
+  [exceed-max-retries-with-plugin] FAIL | recovery=0ms
 
 === Comparison Summary ===
 
 Scenario                                 | No Plugin       | With Plugin     | Delta
 ------------------------------------------------------------------------------------------
-single-transient                         | FAIL   15570ms  | PASS   546ms    | FIXED
-consecutive                              | FAIL   20551ms  | PASS   536ms    | FIXED
+single-transient                         | FAIL   15554ms  | FAIL   0ms      | SAME
+consecutive                              | FAIL   20594ms  | FAIL   0ms      | SAME
+boundary-retry                           | FAIL   30549ms  | FAIL   0ms      | SAME
 persistent                               | FAIL   0ms      | FAIL   0ms      | SAME
+multi-page                               | FAIL   15442ms  | FAIL   0ms      | SAME
+exceed-max-retries                       | FAIL   0ms      | FAIL   0ms      | SAME
+non-chunk-css                            | N/A    N/A      | FAIL   0ms      | N/A
+intermittent                             | N/A    N/A      | FAIL   0ms      | N/A
+rapid-back-to-back                       | N/A    N/A      | FAIL   20855ms  | N/A
+recovery-then-home                       | N/A    N/A      | FAIL   0ms      | N/A
+delayed-failure                          | N/A    N/A      | FAIL   0ms      | N/A
 
-CONCLUSION: Plugin EFFECTIVELY fixes chunk loading failures.
-  Without plugin: 6/6 scenarios FAILED
-  With plugin: 5/6 scenarios PASSED
+INCONCLUSIVE: Could not demonstrate a clear difference.

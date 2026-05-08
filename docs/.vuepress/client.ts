@@ -3,12 +3,10 @@ import { defineClientConfig } from "vuepress/client";
 import { setupUI } from "./client.components";
 import { setupPlugins } from "./client.plugins";
 import Clarity from '@microsoft/clarity';
-// 布局
 import Layout from "./layouts/Layout.vue";
 import AuthorDetail from "./plugins/vuepress-plugin-sillot-author/components/AuthorDetailPage.vue";
 import AuthorList from "./plugins/vuepress-plugin-sillot-author/components/AuthorListPage.vue";
 import PagefindSearch from "./plugins/vuepress-plugin-sillot-site-design/pagefind/components/PagefindSearch.vue";
-// 样式
 import "./styles/index.css";
 
 /**

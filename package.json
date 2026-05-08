@@ -33,6 +33,7 @@
     "@vuepress/plugin-slimsearch": "2.0.0-rc.129",
     "@vueuse/core": "^14.2.1",
     "date-fns": "^4.1.0",
+    "happy-dom": "^20.9.0",
     "http-server": "^14.1.1",
     "naive-ui": "^2.44.1",
     "pinia": "^3.0.4",

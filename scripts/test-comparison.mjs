@@ -30,8 +30,15 @@ function build() {
   execSync('npm run docs:build', { cwd: ROOT, stdio: 'pipe' })
 }
 
+function killServe() {
+  try {
+    execSync('pkill -f "serve docs" 2>/dev/null || true', { cwd: ROOT, stdio: 'pipe' })
+  } catch {}
+}
+
 function runTests(env) {
   console.log(`  Running E2E tests (${env})...`)
+  killServe()
   try {
     const output = execSync(
       `npx playwright test tests/e2e/compare.spec.ts --reporter=list`,
@@ -40,11 +47,14 @@ function runTests(env) {
         env: { ...process.env, CHUNK_RETRY_PLUGIN: env },
         stdio: 'pipe',
         encoding: 'utf-8',
+        timeout: 600000,
       },
     )
     return output
   } catch (e) {
     return e.stdout || e.message
+  } finally {
+    killServe()
   }
 }
 
