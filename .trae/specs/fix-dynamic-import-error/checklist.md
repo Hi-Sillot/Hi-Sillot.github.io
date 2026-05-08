@@ -1,8 +1,12 @@
-- [ ] vite:preloadError 事件监听器已添加，动态导入失败时自动刷新页面
-- [ ] vite:preloadError 回调中调用了 event.preventDefault() 阻止默认错误
-- [ ] 防抖逻辑已实现，避免短时间内多次刷新
-- [ ] Vue Router onError 处理已添加，捕获路由导航中的动态导入错误
-- [ ] Router onError 中正确判断错误类型为动态导入失败
-- [ ] Router onError 中使用 window.location.href 进行完整页面加载而非 SPA 导航
-- [ ] chunkFileNames 配置已添加，避免文件名包含广告/追踪关键词
+- [ ] useChunkErrorRecovery 组合函数已创建
+- [ ] router.beforeEach 正确跟踪 pendingTarget
+- [ ] router.afterEach 正确清除 pendingTarget 和 sessionStorage 标记
+- [ ] vite:preloadError 事件监听器已添加，能提取失败 URL
+- [ ] 缓存破坏重导入逻辑已实现（URL 添加 ?t=timestamp 参数）
+- [ ] vite:preloadError 回调中调用了 event.preventDefault()
+- [ ] router.onError 处理器已添加，能正确识别动态导入失败错误
+- [ ] 第一层恢复（无刷新）已实现：缓存破坏重导入 → 更新路由组件 → 重试导航
+- [ ] 第二层兜底已实现：location.href 定向导航到目标页面
+- [ ] sessionStorage 防循环标记逻辑已实现
+- [ ] client.ts 中已集成 useChunkErrorRecovery
 - [ ] 代码无 TypeScript 类型错误

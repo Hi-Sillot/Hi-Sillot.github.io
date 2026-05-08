@@ -1,18 +1,18 @@
 # Tasks
 
-- [ ] Task 1: 在 client.ts 中添加 vite:preloadError 事件监听器
-  - [ ] SubTask 1.1: 在 `enhance` 函数中添加 `window.addEventListener('vite:preloadError', ...)` 监听器
-  - [ ] SubTask 1.2: 在事件回调中调用 `event.preventDefault()` 阻止默认错误抛出，然后调用 `window.location.reload()` 刷新页面
-  - [ ] SubTask 1.3: 添加防抖逻辑，避免短时间内多次刷新（例如 5 秒内只刷新一次）
+- [ ] Task 1: 创建 useChunkErrorRecovery 组合函数
+  - [ ] SubTask 1.1: 在 `docs/.vuepress/` 下创建 `composables/useChunkErrorRecovery.ts` 文件
+  - [ ] SubTask 1.2: 实现 `router.beforeEach` 跟踪待导航目标 `pendingTarget`
+  - [ ] SubTask 1.3: 实现 `router.afterEach` 清除 `pendingTarget` 和 sessionStorage 标记
+  - [ ] SubTask 1.4: 实现 `vite:preloadError` 事件监听器，提取失败 URL 并尝试缓存破坏重导入
+  - [ ] SubTask 1.5: 实现缓存破坏重导入逻辑：`import(url + '?t=' + Date.now())`，成功后调用 `event.preventDefault()`
+  - [ ] SubTask 1.6: 实现 `router.onError` 处理器，检测动态导入失败错误类型
+  - [ ] SubTask 1.7: 实现第一层恢复：缓存破坏重导入成功后，通过 `router.removeRoute` + `router.addRoute` 更新路由组件，然后 `router.push` 重试导航
+  - [ ] SubTask 1.8: 实现第二层兜底：若第一层失败，执行 `location.href = pendingTarget.fullPath` 定向导航
+  - [ ] SubTask 1.9: 实现 sessionStorage 防循环标记逻辑
 
-- [ ] Task 2: 在 client.ts 中添加 Vue Router onError 处理
-  - [ ] SubTask 2.1: 在 `enhance` 函数中添加 `router.onError()` 处理动态导入失败
-  - [ ] SubTask 2.2: 判断错误类型是否为动态导入失败（检查 error.message 包含 "Failed to fetch dynamically imported module" 或 "Importing a module script failed"）
-  - [ ] SubTask 2.3: 匹配到动态导入错误时，使用 `window.location.href = to.fullPath` 进行完整页面加载
-
-- [ ] Task 3: 在 config.ts 中配置 chunkFileNames 避免浏览器扩展拦截
-  - [ ] SubTask 3.1: 在 `viteBundler` 的 `viteOptions.build.rollupOptions.output` 中配置 `chunkFileNames`，使用不含广告/追踪关键词的命名模式
+- [ ] Task 2: 在 client.ts 中集成 useChunkErrorRecovery
+  - [ ] SubTask 2.1: 在 `enhance` 函数中导入并调用 `useChunkErrorRecovery(router)`
 
 # Task Dependencies
-- Task 2 独立于 Task 1，两者可并行实现
-- Task 3 独立于 Task 1 和 Task 2
+- Task 2 依赖 Task 1

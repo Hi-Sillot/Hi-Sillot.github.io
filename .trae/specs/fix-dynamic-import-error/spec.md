@@ -1,43 +1,61 @@
 # 修复 VuePress 站内跳转失败（动态导入模块错误）Spec
 
 ## Why
-VuePress 站点部署新版本后，用户浏览器中缓存的旧 HTML 引用了已被删除的旧 chunk 文件，导致动态导入失败（`TypeError: Failed to fetch dynamically imported module`），站内路由跳转就会失败。用户必须手动刷新页面才能恢复，体验极差。
+VuePress 站点在网络波动时，动态导入 chunk 可能失败（`TypeError: Failed to fetch dynamically imported module`），导致站内路由跳转卡住。根据 [WHATWG HTML 规范](https://html.spec.whatwg.org/#fetch-a-single-module-script)，浏览器会**永久缓存失败的动态导入结果**，在 Chromium 中此失败缓存甚至是"粘性的"——刷新页面也无法清除。因此即使网络恢复，同一 URL 的 `import()` 也不会重试，导航持续失败。
 
 ## What Changes
-- 在客户端增强文件中添加 `vite:preloadError` 事件监听器，当动态导入失败时自动刷新页面
-- 在 Vue Router 上添加 `onError` 处理，捕获路由导航中的动态导入错误并自动刷新
-- 在 Vite 构建配置中添加 `chunkFileNames` 策略，避免浏览器扩展（如广告拦截器）误拦截 chunk 文件
+- 在客户端增强文件中创建 `useChunkErrorRecovery` 组合函数，实现**两层恢复策略**
+- **第一层（无刷新恢复）**：检测动态导入失败 → 用带缓存破坏参数（`?t=timestamp`）的不同 URL 重新导入模块 → 替换路由组件 → 重试 SPA 导航
+- **第二层（兜底）**：若第一层失败，执行定向页面导航 `location.href = targetPath`（不是刷新当前页，而是直接导航到用户想去的目标页）
+- 使用 `vite:preloadError` 事件 + `router.onError` 双重检测机制
+- 使用 `sessionStorage` 标记防止无限重试循环
 
 ## Impact
-- Affected code: `docs/.vuepress/client.ts`、`docs/.vuepress/config.ts`
-- 用户体验：站内跳转不再因版本更新而失败，自动刷新恢复
+- Affected code: `docs/.vuepress/client.ts`（新增组合函数调用）
+- 用户体验：站内跳转不再因网络波动而卡住，大多数情况下无需刷新页面即可自动恢复
 
 ## ADDED Requirements
 
-### Requirement: 动态导入失败自动恢复
-系统 SHALL 在动态导入模块失败时自动刷新页面，而不是让用户看到空白或错误页面。
+### Requirement: 动态导入失败时优先无刷新恢复
+系统 SHALL 在动态导入失败时，优先尝试不刷新页面的方式恢复导航。
 
-#### Scenario: 版本更新后用户点击站内链接
-- **WHEN** 站点部署新版本后，用户点击站内链接跳转
-- **AND** 旧 chunk 文件已被删除，动态导入失败
-- **THEN** 系统自动刷新页面，加载新版本的 HTML 和 chunk 文件
-- **AND** 用户无需手动操作即可正常访问目标页面
+#### Scenario: 网络波动导致动态导入失败后自动恢复
+- **WHEN** 用户点击站内链接跳转到新页面
+- **AND** 因网络波动导致目标页面 chunk 的动态导入失败
+- **THEN** 系统自动用带缓存破坏参数的 URL 重新导入该 chunk
+- **AND** 重新导入成功后，更新路由组件并重试 SPA 导航
+- **AND** 用户无需任何操作即可正常访问目标页面，页面无刷新
 
-#### Scenario: 网络不稳定导致动态导入失败
-- **WHEN** 用户网络不稳定，动态导入请求失败
-- **THEN** 系统自动刷新页面重试加载
+#### Scenario: 缓存破坏重导入也失败时兜底恢复
+- **WHEN** 系统尝试缓存破坏重导入仍然失败（网络持续不可用）
+- **THEN** 系统执行定向页面导航 `location.href` 到用户目标页面
+- **AND** 不产生无限重试循环（通过 sessionStorage 标记限制）
 
-### Requirement: Vue Router 导航错误处理
-系统 SHALL 在 Vue Router 导航过程中捕获动态导入错误，并自动刷新页面恢复。
+### Requirement: 双重失败检测机制
+系统 SHALL 同时使用 `vite:preloadError` 事件和 `router.onError` 检测动态导入失败。
 
-#### Scenario: 路由导航中动态导入失败
-- **WHEN** 用户通过 Vue Router 导航到新页面
-- **AND** 页面组件的动态导入失败
-- **THEN** 系统捕获错误并自动刷新页面
+#### Scenario: vite:preloadError 先于 router.onError 触发
+- **WHEN** Vite 预加载 chunk 失败
+- **THEN** `vite:preloadError` 事件触发，系统尝试缓存破坏重导入
+- **AND** 调用 `event.preventDefault()` 抑制错误传播
 
-### Requirement: 避免 chunk 文件名被浏览器扩展拦截
-系统 SHALL 在构建时为 chunk 文件使用不含广告/追踪关键词的文件名，避免被浏览器扩展误拦截。
+#### Scenario: router.onError 捕获导航失败
+- **WHEN** Vue Router 导航因动态导入失败
+- **THEN** `router.onError` 回调触发，系统尝试恢复导航
 
-#### Scenario: 用户使用广告拦截器浏览站点
-- **WHEN** 用户浏览器安装了广告拦截器
-- **THEN** chunk 文件不会被拦截，站点正常加载
+### Requirement: 防止无限重试循环
+系统 SHALL 使用 sessionStorage 标记防止恢复操作导致无限循环。
+
+#### Scenario: 恢复操作后页面仍然加载失败
+- **WHEN** 系统执行了恢复操作（缓存破坏重导入或定向导航）
+- **AND** 恢复后页面仍然加载失败
+- **THEN** 系统检测到 sessionStorage 中的重试标记，不再重复执行恢复操作
+- **AND** 导航成功后清除 sessionStorage 标记
+
+### Requirement: 跟踪用户导航目标
+系统 SHALL 在 `router.beforeEach` 中跟踪用户的导航目标，确保恢复时能导航到正确的页面。
+
+#### Scenario: 用户导航到特定页面时 chunk 加载失败
+- **WHEN** 用户从页面 A 点击链接导航到页面 B
+- **AND** 页面 B 的 chunk 加载失败
+- **THEN** 系统恢复时导航到页面 B（而非页面 A 或当前页）
