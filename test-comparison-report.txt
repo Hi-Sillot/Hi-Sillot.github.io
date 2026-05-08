@@ -1,0 +1,30 @@
+=== Chunk Retry Plugin A/B Comparison Test Report ===
+Date: 2026-05-08T20:38:27.981Z
+
+--- Phase A: WITHOUT plugin ---
+  [single-transient-no-plugin] FAIL | recovery=15570ms
+  [single-transient-no-plugin] FAIL | recovery=15570ms
+  [consecutive-no-plugin] FAIL | recovery=20551ms
+  [single-transient-no-plugin] FAIL | recovery=15570ms
+  [consecutive-no-plugin] FAIL | recovery=20551ms
+  [persistent-no-plugin] FAIL | recovery=0ms
+
+--- Phase B: WITH plugin ---
+  [single-transient-with-plugin] PASS | recovery=546ms
+  [single-transient-with-plugin] PASS | recovery=546ms
+  [consecutive-with-plugin] PASS | recovery=536ms
+  [single-transient-with-plugin] PASS | recovery=546ms
+  [consecutive-with-plugin] PASS | recovery=536ms
+  [persistent-with-plugin] FAIL | recovery=0ms
+
+=== Comparison Summary ===
+
+Scenario                                 | No Plugin       | With Plugin     | Delta
+------------------------------------------------------------------------------------------
+single-transient                         | FAIL   15570ms  | PASS   546ms    | FIXED
+consecutive                              | FAIL   20551ms  | PASS   536ms    | FIXED
+persistent                               | FAIL   0ms      | FAIL   0ms      | SAME
+
+CONCLUSION: Plugin EFFECTIVELY fixes chunk loading failures.
+  Without plugin: 6/6 scenarios FAILED
+  With plugin: 5/6 scenarios PASSED
