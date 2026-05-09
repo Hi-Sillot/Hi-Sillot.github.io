@@ -165,8 +165,8 @@ const proxy = httpProxy.createProxyServer({
 })
 
 proxy.on('proxyReq', (proxyReq, req) => {
-  const contentType = req.headers['accept'] || ''
-  if (contentType.includes('text/html')) {
+  const accept = req.headers['accept'] || ''
+  if (accept.includes('text/html')) {
     proxyReq.removeHeader('accept-encoding')
     proxyReq.setHeader('accept-encoding', 'identity')
   }
@@ -296,7 +296,11 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
     proxyRes.on('end', () => {
       const full = Buffer.concat(originalBody)
       const cutPoint = Math.floor(full.length * (0.3 + Math.random() * 0.4))
-      res.writeHead(proxyRes.statusCode, proxyRes.headers)
+      const headers = { ...proxyRes.headers }
+      delete headers['content-encoding']
+      delete headers['content-length']
+      delete headers['transfer-encoding']
+      res.writeHead(proxyRes.statusCode, headers)
       res.end(full.slice(0, cutPoint))
     })
     return
@@ -312,46 +316,44 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
     if (effectiveLatency > 0) {
       stats.delayed++
       const originalHeaders = { ...proxyRes.headers }
+      const bodyChunks = []
+      proxyRes.on('data', (chunk) => bodyChunks.push(chunk))
+      proxyRes.on('end', () => {
+        const body = Buffer.concat(bodyChunks)
 
-      setTimeout(() => {
-        if (res.destroyed) return
+        setTimeout(() => {
+          if (res.destroyed) return
 
-        if (shouldTruncate) {
-          stats.truncated++
-          const originalBody = []
-          proxyRes.on('data', (chunk) => originalBody.push(chunk))
-          proxyRes.on('end', () => {
-            const full = Buffer.concat(originalBody)
-            const cutPoint = Math.floor(full.length * (0.3 + Math.random() * 0.4))
-            res.writeHead(proxyRes.statusCode, originalHeaders)
-            res.end(full.slice(0, cutPoint))
-          })
-          return
-        }
+          if (shouldTruncate) {
+            stats.truncated++
+            const cutPoint = Math.floor(body.length * (0.3 + Math.random() * 0.4))
+            const headers = { ...originalHeaders }
+            delete headers['content-encoding']
+            delete headers['content-length']
+            delete headers['transfer-encoding']
+            res.writeHead(proxyRes.statusCode, headers)
+            res.end(body.slice(0, cutPoint))
+            return
+          }
 
-        if (effectiveBandwidth > 0) {
-          stats.throttled++
-          const throttle = new ThrottleStream(effectiveBandwidth)
-          res.writeHead(proxyRes.statusCode, proxyRes.headers)
-          proxyRes.pipe(throttle).pipe(res)
-        } else {
-          res.writeHead(proxyRes.statusCode, proxyRes.headers)
-          proxyRes.pipe(res)
-        }
-      }, Math.max(0, effectiveLatency))
-    } else if (effectiveBandwidth > 0) {
+          res.writeHead(proxyRes.statusCode, originalHeaders)
+          res.end(body)
+        }, Math.max(0, effectiveLatency))
+      })
+      return
+    }
+
+    if (effectiveBandwidth > 0) {
       stats.throttled++
       const throttle = new ThrottleStream(effectiveBandwidth)
       res.writeHead(proxyRes.statusCode, proxyRes.headers)
       proxyRes.pipe(throttle).pipe(res)
-    } else {
-      res.writeHead(proxyRes.statusCode, proxyRes.headers)
-      proxyRes.pipe(res)
+      return
     }
-  } else {
-    res.writeHead(proxyRes.statusCode, proxyRes.headers)
-    proxyRes.pipe(res)
   }
+
+  res.writeHead(proxyRes.statusCode, proxyRes.headers)
+  proxyRes.pipe(res)
 })
 
 function injectChaosPanel(proxyRes, res) {

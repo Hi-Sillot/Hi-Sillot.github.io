@@ -20,7 +20,9 @@ export interface RouterLike {
   removeRoute(name: string | symbol): void
   addRoute(route: Record<string, unknown>): void
   push(to: string): Promise<unknown>
+  replace(to: string): Promise<unknown>
   resolve(to: string): RouteLocationNormalized
+  currentRoute: { value: RouteLocationNormalized }
 }
 
 export interface ChunkRetryOptions {

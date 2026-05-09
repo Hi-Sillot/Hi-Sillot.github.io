@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ChunkRetryManager } from '../../docs/.vuepress/plugins/vuepress-plugin-sillot-chunk-retry/src/core/ChunkRetryManager'
 import type { RouterLike, RouteLocationNormalized } from '../../docs/.vuepress/plugins/vuepress-plugin-sillot-chunk-retry/src/core/types'
 
@@ -14,6 +14,8 @@ function createMockRouter(options?: { routes?: Array<any> }) {
     { name: 'test-page', path: '/test/', meta: {}, components: { default: {} }, props: true },
   ]
 
+  const currentRoute = { value: { path: '/test/', fullPath: '/test/', name: 'test-page', matched: [], meta: {} } }
+
   return {
     beforeEach: vi.fn((fn) => { guards.beforeEach.push(fn); return () => {} }),
     afterEach: vi.fn((fn) => { guards.afterEach.push(fn); return () => {} }),
@@ -22,8 +24,13 @@ function createMockRouter(options?: { routes?: Array<any> }) {
     removeRoute: vi.fn(),
     addRoute: vi.fn(),
     push: vi.fn(() => Promise.resolve()),
+    replace: vi.fn(() => Promise.resolve()),
     resolve: vi.fn((to) => ({ path: to, fullPath: to, name: 'test-page', matched: [], meta: {} })),
+    currentRoute,
     _guards: guards,
+    _setCurrentRoute(route: any) {
+      currentRoute.value = route
+    },
   }
 }
 
@@ -45,6 +52,10 @@ describe('ChunkRetryManager', () => {
     router = createMockRouter()
     manager = new ChunkRetryManager(router as any, { maxRetries: 3, retryDelay: 100, retryKey: 'test-retry', showToast: false })
     sessionStorage.clear()
+  })
+
+  afterEach(() => {
+    manager.destroy()
   })
 
   describe('init', () => {
@@ -71,7 +82,7 @@ describe('ChunkRetryManager', () => {
         const ssrRouter = createMockRouter()
         const ssrManager = new SSRChunkRetryManager(ssrRouter as any)
         ssrManager.init()
-        expect(ssrRouter.beforeEach).not.toHaveBeenCalled()
+        expect(ssrRouter.afterEach).not.toHaveBeenCalled()
       } finally {
         Object.defineProperty(globalThis, 'window', { value: originalWindow, writable: true, configurable: true })
         vi.resetModules()
@@ -79,23 +90,8 @@ describe('ChunkRetryManager', () => {
     })
   })
 
-  describe('beforeEach / afterEach', () => {
-    it('tracks pendingTarget in beforeEach', () => {
-      manager.init()
-      const to = createMockLocation('/test/')
-      router._guards.beforeEach[0](to, createMockLocation('/'))
-      expect((manager as any).pendingTarget).toBe(to)
-    })
-
-    it('clears pendingTarget in afterEach', () => {
-      manager.init()
-      const to = createMockLocation('/test/')
-      router._guards.beforeEach[0](to, createMockLocation('/'))
-      router._guards.afterEach[0](to, createMockLocation('/'))
-      expect((manager as any).pendingTarget).toBeNull()
-    })
-
-    it('clears retryCount and sessionStorage in afterEach', () => {
+  describe('afterEach', () => {
+    it('clears retryCount in afterEach', () => {
       manager.init()
       sessionStorage.setItem('test-retry', '123')
       ;(manager as any).retryCount = 5
@@ -104,24 +100,46 @@ describe('ChunkRetryManager', () => {
       expect(sessionStorage.getItem('test-retry')).toBeNull()
     })
 
-    it('resets isRecovering in afterEach', () => {
+    it('clears recoveredUrls and recoveredModules in afterEach', () => {
       manager.init()
-      ;(manager as any).isRecovering = true
+      ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
       router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
-      expect((manager as any).isRecovering).toBe(false)
+      expect((manager as any).recoveredUrls.size).toBe(0)
+      expect((manager as any).recoveredModules.size).toBe(0)
     })
 
-    it('clears prefetchPromise and prefetchUrl in afterEach', () => {
+    it('records lastNavigationTime in afterEach', () => {
       manager.init()
-      ;(manager as any).prefetchPromise = Promise.resolve({})
-      ;(manager as any).prefetchUrl = 'http://example.com/test.js'
+      const before = Date.now()
       router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
-      expect((manager as any).prefetchPromise).toBeNull()
-      expect((manager as any).prefetchUrl).toBeNull()
+      const after = Date.now()
+      expect((manager as any).lastNavigationTime).toBeGreaterThanOrEqual(before)
+      expect((manager as any).lastNavigationTime).toBeLessThanOrEqual(after)
     })
   })
 
-  describe('handleRouterError', () => {
+  describe('beforeEach', () => {
+    it('stores pendingTarget from beforeEach', () => {
+      manager.init()
+      const target = createMockLocation('/other-page/', 'other-page')
+      router._guards.beforeEach[0](target, createMockLocation('/test/'))
+      expect((manager as any).pendingTarget).toBe(target)
+    })
+
+    it('uses pendingTarget in vite:preloadError handler', () => {
+      manager.init()
+      const target = createMockLocation('/other-page/', 'other-page')
+      router._guards.beforeEach[0](target, createMockLocation('/test/'))
+
+      const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
+      window.dispatchEvent(event)
+
+      expect((manager as any).isRecovering).toBe(true)
+    })
+  })
+
+  describe('handleChunkFailure via router.onError', () => {
     it('ignores non-dynamic-import errors', () => {
       manager.init()
       const onErrorFn = router._guards.onError[0]
@@ -162,6 +180,7 @@ describe('ChunkRetryManager', () => {
       manager.init()
       const onErrorFn = router._guards.onError[0]
       ;(manager as any).isRecovering = true
+      ;(manager as any).pendingRecovery = Promise.resolve()
       sessionStorage.setItem('test-retry', '123')
       onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
       expect(router.push).not.toHaveBeenCalled()
@@ -174,24 +193,16 @@ describe('ChunkRetryManager', () => {
       onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
       expect((manager as any).isRecovering).toBe(false)
     })
-
-    it('falls back when no URL can be extracted from error', () => {
-      manager.init()
-      const onErrorFn = router._guards.onError[0]
-      onErrorFn(new Error('Importing a module script failed.'), createMockLocation('/test/'), createMockLocation('/'))
-      expect((manager as any).isRecovering).toBe(true)
-      expect(sessionStorage.getItem('test-retry')).not.toBeNull()
-    })
   })
 
-  describe('handlePreloadError', () => {
-    it('starts prefetch for valid error with URL', () => {
+  describe('handleChunkFailure via vite:preloadError', () => {
+    it('triggers recovery for valid preload error with URL', () => {
       manager.init()
       const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
       window.dispatchEvent(event)
 
-      expect((manager as any).prefetchUrl).toBe('https://example.com/assets/page.js')
-      expect((manager as any).prefetchPromise).not.toBeNull()
+      expect((manager as any).isRecovering).toBe(true)
+      expect(sessionStorage.getItem('test-retry')).not.toBeNull()
     })
 
     it('does NOT call event.preventDefault', () => {
@@ -205,37 +216,35 @@ describe('ChunkRetryManager', () => {
       manager.init()
       const event = new Event('vite:preloadError', { cancelable: true }) as Event & { payload?: Error }
       window.dispatchEvent(event)
-      expect((manager as any).prefetchUrl).toBeNull()
+      expect((manager as any).isRecovering).toBe(false)
     })
 
     it('ignores preloadError with error that has no extractable URL', () => {
       manager.init()
       const event = createMockPreloadEvent(new Error('Some unknown error'))
       window.dispatchEvent(event)
-      expect((manager as any).prefetchUrl).toBeNull()
+      expect((manager as any).isRecovering).toBe(false)
     })
 
-    it('does not overwrite existing prefetch for same URL', () => {
+    it('skips already recovered URLs', () => {
       manager.init()
-      const event1 = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
-      window.dispatchEvent(event1)
-      const firstPromise = (manager as any).prefetchPromise
+      ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
 
-      const event2 = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
-      window.dispatchEvent(event2)
-      expect((manager as any).prefetchPromise).toBe(firstPromise)
+      const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
+      window.dispatchEvent(event)
+
+      expect((manager as any).isRecovering).toBe(false)
     })
 
-    it('starts new prefetch for different URL', () => {
+    it('uses router.currentRoute.value as target route', () => {
       manager.init()
-      const event1 = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page1.js'))
-      window.dispatchEvent(event1)
-      const firstPromise = (manager as any).prefetchPromise
+      router._setCurrentRoute(createMockLocation('/develop_notes/'))
 
-      const event2 = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page2.js'))
-      window.dispatchEvent(event2)
-      expect((manager as any).prefetchUrl).toBe('https://example.com/assets/page2.js')
-      expect((manager as any).prefetchPromise).not.toBe(firstPromise)
+      const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/notes.js'))
+      window.dispatchEvent(event)
+
+      expect((manager as any).isRecovering).toBe(true)
     })
   })
 
@@ -282,21 +291,20 @@ describe('ChunkRetryManager', () => {
   })
 
   describe('coordination between handlers', () => {
-    it('handlePreloadError prefetch is used by handleRouterError', () => {
+    it('preloadError triggers recovery that router.onError would also trigger', () => {
       manager.init()
       const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
       window.dispatchEvent(event)
 
-      expect((manager as any).prefetchUrl).toBe('https://example.com/assets/page.js')
-      expect((manager as any).prefetchPromise).not.toBeNull()
+      expect((manager as any).isRecovering).toBe(true)
 
       const onErrorFn = router._guards.onError[0]
       onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
 
-      expect((manager as any).isRecovering).toBe(true)
+      expect(router.push).not.toHaveBeenCalled()
     })
 
-    it('handleRouterError waits for already recovering process', () => {
+    it('handleChunkFailure waits for already recovering process', () => {
       manager.init()
       const onErrorFn = router._guards.onError[0]
       ;(manager as any).isRecovering = true
@@ -308,76 +316,23 @@ describe('ChunkRetryManager', () => {
     })
   })
 
-  describe('prefetch integration', () => {
-    it('prefetchPromise catches errors and resolves to null', async () => {
-      manager.init()
-      const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
-      window.dispatchEvent(event)
-
-      const result = await (manager as any).prefetchPromise
-      expect(result).toBeNull()
-    })
-
-    it('recoverWithCacheBusting uses prefetch when available', async () => {
-      manager.init()
-      ;(manager as any).prefetchPromise = Promise.resolve({ default: { name: 'TestComponent' } })
-      ;(manager as any).prefetchUrl = 'https://example.com/assets/page.js'
-
-      const to = createMockLocation('/test/')
-      const gen = (manager as any).recoveryGeneration
-      await (manager as any).recoverWithCacheBusting('https://example.com/assets/page.js', to, gen)
-
-      expect(router.removeRoute).toHaveBeenCalled()
-      expect(router.addRoute).toHaveBeenCalled()
-    })
-
-    it('recoverWithCacheBusting falls back to direct import when prefetch is null', async () => {
-      manager.init()
-      ;(manager as any).prefetchPromise = Promise.resolve(null)
-      ;(manager as any).prefetchUrl = 'https://example.com/assets/page.js'
-
-      const to = createMockLocation('/test/')
-      const gen = (manager as any).recoveryGeneration
-      try {
-        await (manager as any).recoverWithCacheBusting('https://example.com/assets/page.js', to, gen)
-      } catch {
-        // Expected to fail in test environment
-      }
-    })
-  })
-
-  describe('phantom failure detection', () => {
+  describe('recovered URL reuse', () => {
     it('retries navigation when URL is already recovered', () => {
       manager.init()
       ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
 
       const onErrorFn = router._guards.onError[0]
       onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
 
       expect(router.push).toHaveBeenCalledWith('/test/')
       expect((manager as any).isRecovering).toBe(false)
-      expect((manager as any).phantomRetryCount).toBe(1)
     })
 
-    it('falls back after 3 phantom retries', () => {
+    it('does not enter full recovery for already recovered URLs', () => {
       manager.init()
       ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
-      ;(manager as any).phantomRetryCount = 3
-
-      const originalLocation = window.location
-      Object.defineProperty(window, 'location', { value: { href: '', pathname: '/', search: '' }, writable: true, configurable: true })
-
-      const onErrorFn = router._guards.onError[0]
-      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
-
-      expect(window.location.href).toBe('/test/')
-
-      Object.defineProperty(window, 'location', { value: originalLocation, writable: true, configurable: true })
-    })
-
-    it('does not enter full recovery for phantom failures', () => {
-      manager.init()
-      ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
 
       const onErrorFn = router._guards.onError[0]
       onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
@@ -386,46 +341,12 @@ describe('ChunkRetryManager', () => {
       expect(sessionStorage.getItem('test-retry')).toBeNull()
     })
 
-    it('does not trigger phantom path for non-recovered URLs', () => {
+    it('does not trigger reuse for non-recovered URLs', () => {
       manager.init()
       const onErrorFn = router._guards.onError[0]
       onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
 
       expect((manager as any).isRecovering).toBe(true)
-      expect((manager as any).phantomRetryCount).toBe(0)
-    })
-  })
-
-  describe('recoveredModules', () => {
-    it('stores module in recoveredModules when prefetch succeeds', async () => {
-      manager.init()
-      ;(manager as any).prefetchPromise = Promise.resolve({ default: { name: 'TestComponent' } })
-      ;(manager as any).prefetchUrl = 'https://example.com/assets/page.js'
-
-      const to = createMockLocation('/test/')
-      const gen = (manager as any).recoveryGeneration
-      await (manager as any).recoverWithCacheBusting('https://example.com/assets/page.js', to, gen)
-
-      expect((manager as any).recoveredModules.has('https://example.com/assets/page.js')).toBe(true)
-    })
-
-    it('clears recoveredModules in afterEach', () => {
-      manager.init()
-      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
-      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
-      expect((manager as any).recoveredModules.size).toBe(0)
-    })
-
-    it('handlePreloadError skips prefetch for already recovered URLs', () => {
-      manager.init()
-      ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
-      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
-
-      const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
-      window.dispatchEvent(event)
-
-      expect((manager as any).prefetchUrl).toBeNull()
-      expect((manager as any).prefetchPromise).toBeNull()
     })
   })
 
@@ -450,44 +371,16 @@ describe('ChunkRetryManager', () => {
       expect(resolved).toBe(mockModule)
     })
 
-    it('resets phantomRetryCount in updateRouteAndRetry', async () => {
+    it('uses router.replace instead of router.push', async () => {
       manager.init()
-      ;(manager as any).phantomRetryCount = 2
-
       const mockModule = { default: { name: 'TestComponent' } }
       await (manager as any).updateRouteAndRetry(createMockLocation('/test/'), mockModule)
 
-      expect((manager as any).phantomRetryCount).toBe(0)
+      expect(router.replace).toHaveBeenCalledWith('/test/')
     })
   })
 
-  describe('recovery generation and target', () => {
-    it('cancels stale recovery when new route error arrives', () => {
-      manager.init()
-      ;(manager as any).isRecovering = true
-      ;(manager as any).recoveryTarget = createMockLocation('/old-page/')
-      ;(manager as any).pendingRecovery = Promise.resolve()
-
-      const onErrorFn = router._guards.onError[0]
-      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/new-page.js'), createMockLocation('/new-page/'), createMockLocation('/'))
-
-      expect((manager as any).isRecovering).toBe(true)
-      expect((manager as any).recoveryTarget?.fullPath).toBe('/new-page/')
-      expect((manager as any).retryCount).toBe(0)
-    })
-
-    it('keeps current recovery when same route error arrives', () => {
-      manager.init()
-      ;(manager as any).isRecovering = true
-      ;(manager as any).recoveryTarget = createMockLocation('/test/')
-      ;(manager as any).pendingRecovery = Promise.resolve()
-
-      const onErrorFn = router._guards.onError[0]
-      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
-
-      expect((manager as any).recoveryTarget?.fullPath).toBe('/test/')
-    })
-
+  describe('recovery generation', () => {
     it('increments recoveryGeneration on new recovery', () => {
       manager.init()
       const initialGen = (manager as any).recoveryGeneration
@@ -500,9 +393,8 @@ describe('ChunkRetryManager', () => {
 
     it('stale recovery is skipped when generation mismatches', async () => {
       manager.init()
-      const mockModule = { default: { name: 'TestComponent' } }
-      ;(manager as any).prefetchPromise = Promise.resolve(mockModule)
-      ;(manager as any).prefetchUrl = 'https://example.com/assets/page.js'
+      ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
 
       const to = createMockLocation('/test/')
       const staleGeneration = (manager as any).recoveryGeneration
@@ -511,13 +403,6 @@ describe('ChunkRetryManager', () => {
       await (manager as any).recoverWithCacheBusting('https://example.com/assets/page.js', to, staleGeneration)
 
       expect(router.removeRoute).not.toHaveBeenCalled()
-    })
-
-    it('clears recoveryTarget in afterEach', () => {
-      manager.init()
-      ;(manager as any).recoveryTarget = createMockLocation('/test/')
-      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
-      expect((manager as any).recoveryTarget).toBeNull()
     })
   })
 })
