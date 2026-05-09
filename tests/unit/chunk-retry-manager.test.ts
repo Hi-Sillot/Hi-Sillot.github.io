@@ -233,13 +233,15 @@ describe('ChunkRetryManager', () => {
   })
 
   describe('handleChunkFailure via vite:preloadError', () => {
-    it('does NOT trigger recovery from preloadError - only suppresses error', () => {
+    it('triggers secondary chunk recovery for preload errors', () => {
       manager.init()
+      const recoverSpy = vi.spyOn(manager as any, 'recoverSecondaryChunk')
       const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
       window.dispatchEvent(event)
 
-      expect((manager as any).isRecovering).toBe(false)
-      expect(sessionStorage.getItem('test-retry')).toBeNull()
+      expect(event.defaultPrevented).toBe(true)
+      expect(recoverSpy).toHaveBeenCalledWith('https://example.com/assets/page.js')
+      recoverSpy.mockRestore()
     })
 
     it('calls event.preventDefault to suppress Vite re-throw', () => {
@@ -263,36 +265,41 @@ describe('ChunkRetryManager', () => {
       expect((manager as any).isRecovering).toBe(false)
     })
 
-    it('does not start recovery when URL already in recoveredModules', () => {
+    it('tries reload when URL already in recoveredModules', () => {
       manager.init()
       const mockModule = { default: { name: 'TestComponent' } }
       ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', mockModule)
+      const reloadSpy = vi.spyOn(manager as any, 'tryReloadCurrentPage')
 
       const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
       window.dispatchEvent(event)
 
-      expect((manager as any).isRecovering).toBe(false)
-      expect(router.replace).not.toHaveBeenCalled()
+      expect(reloadSpy).toHaveBeenCalledWith('https://example.com/assets/page.js')
+      reloadSpy.mockRestore()
     })
 
     it('does not start recovery when isRecovering is true', () => {
       manager.init()
       ;(manager as any).isRecovering = true
+      const recoverSpy = vi.spyOn(manager as any, 'recoverSecondaryChunk')
 
       const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
       window.dispatchEvent(event)
 
-      expect(router.replace).not.toHaveBeenCalled()
+      expect(recoverSpy).not.toHaveBeenCalled()
+      recoverSpy.mockRestore()
     })
 
     it('does not start recovery when isApplyingModule is true', () => {
       manager.init()
       ;(manager as any).isApplyingModule = true
+      const recoverSpy = vi.spyOn(manager as any, 'recoverSecondaryChunk')
 
       const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
       window.dispatchEvent(event)
 
-      expect(router.replace).not.toHaveBeenCalled()
+      expect(recoverSpy).not.toHaveBeenCalled()
+      recoverSpy.mockRestore()
     })
   })
 

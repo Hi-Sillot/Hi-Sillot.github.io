@@ -333,10 +333,13 @@ export class ChunkRetryManager {
       event.preventDefault()
 
       if (this.recoveredModules.has(failedUrl)) {
+        this.tryReloadCurrentPage(failedUrl)
         return
       }
 
       if (this.isRecovering || this.isApplyingModule) return
+
+      this.recoverSecondaryChunk(failedUrl)
     }) as (ev: Event) => void
 
     window.addEventListener('vite:preloadError', this.preloadErrorHandler)
@@ -459,6 +462,51 @@ export class ChunkRetryManager {
         (err) => { clearTimeout(timer); reject(err) },
       )
     })
+  }
+
+  private async recoverSecondaryChunk(failedUrl: string): Promise<void> {
+    const shortUrl = this.shortenUrl(failedUrl)
+    this.toast.show('detect', '页面组件加载失败', shortUrl)
+
+    try {
+      this.toast.show('retrying', '正在恢复页面组件...', shortUrl)
+      const module = await this.retryImportWithCacheBusting(failedUrl)
+      this.recoveredModules.set(failedUrl, module)
+      this.toast.show('success', '页面组件恢复成功', shortUrl)
+      this.tryReloadCurrentPage(failedUrl)
+    } catch {
+      this.toast.show('fail', '页面组件恢复失败', shortUrl)
+      const currentPath = this.router.currentRoute.value?.fullPath
+      if (currentPath) {
+        this.fallbackNavigation(this.router.currentRoute.value as RouteLocationNormalized)
+      }
+    }
+  }
+
+  private secondaryReloadTimer: ReturnType<typeof setTimeout> | null = null
+  private secondaryReloadCount = 0
+
+  private tryReloadCurrentPage(failedUrl: string): void {
+    if (this.secondaryReloadTimer) {
+      clearTimeout(this.secondaryReloadTimer)
+    }
+    this.secondaryReloadCount++
+    if (this.secondaryReloadCount > 2) {
+      this.secondaryReloadCount = 0
+      return
+    }
+    this.secondaryReloadTimer = setTimeout(() => {
+      this.secondaryReloadCount = 0
+      const currentPath = this.router.currentRoute.value?.fullPath
+      if (currentPath) {
+        this.isApplyingModule = true
+        this.router.replace(currentPath).then(() => {
+          this.isApplyingModule = false
+        }).catch(() => {
+          this.isApplyingModule = false
+        })
+      }
+    }, 300)
   }
 
   private patchRouteLoader(path: string, module: any): { routeKey: string; originalLoader: () => Promise<any> } | null {
