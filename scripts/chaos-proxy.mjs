@@ -371,7 +371,7 @@ function injectChaosPanel(proxyRes, res) {
   })
 }
 
-const wss = new WebSocketServer({ server, path: '/__chaos__/ws' })
+const wss = new WebSocketServer({ noServer: true })
 
 function broadcastState() {
   const msg = JSON.stringify({
@@ -655,9 +655,9 @@ server.on('upgrade', (req, socket, head) => {
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit('connection', ws, req)
     })
-    return
+  } else {
+    proxy.ws(req, socket, head)
   }
-  proxy.ws(req, socket, head)
 })
 
 server.listen(proxyPort, () => {
