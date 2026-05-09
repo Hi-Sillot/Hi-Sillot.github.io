@@ -1,4 +1,4 @@
-import { defineClientConfig } from 'vuepress/client'
+import { defineClientConfig, useRoutes } from 'vuepress/client'
 import { onMounted } from 'vue'
 import { ChunkRetryManager } from './src/core/ChunkRetryManager'
 
@@ -10,6 +10,8 @@ export default defineClientConfig({
     manager.init()
   },
   setup() {
+    const routes = useRoutes()
+    manager?.setRoutes(routes)
     onMounted(() => {
       manager?.initUI()
     })

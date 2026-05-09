@@ -272,76 +272,74 @@ describe('ChunkRetryManager', () => {
     })
   })
 
-  describe('updatePageChunk', () => {
-    it('sets _pageChunk on current route when path matches', () => {
+  describe('afterEach loader restore', () => {
+    it('restores original route loader in afterEach', () => {
       manager.init()
-      const mockModule = { default: { name: 'TestComponent' } }
-      const to = createMockLocation('/test/')
-      router._setCurrentRoute(to)
+      const originalLoader = () => Promise.resolve({ old: true })
+      ;(manager as any).pendingLoaderRestore = { path: '/test/', originalLoader }
+      const mockRoutes = {
+        '/test/': { loader: () => Promise.resolve({ patched: true }) }
+      }
+      ;(manager as any).routes = mockRoutes
 
-      ;(manager as any).updatePageChunk(to, mockModule)
+      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
 
-      expect(router.currentRoute.value.meta._pageChunk).toBe(mockModule)
-    })
-
-    it('sets _pageChunk on current route when fullPath matches but path differs', () => {
-      manager.init()
-      const mockModule = { default: { name: 'TestComponent' } }
-      const to = createMockLocation('/test/')
-      to.path = '/test'
-      to.fullPath = '/test/'
-      router._setCurrentRoute({ path: '/test/', fullPath: '/test/', name: 'test-page', matched: [], meta: {} })
-
-      ;(manager as any).updatePageChunk(to, mockModule)
-
-      expect(router.currentRoute.value.meta._pageChunk).toBe(mockModule)
-    })
-
-    it('falls back to full page navigation when current path does not match target', () => {
-      manager.init()
-      const mockModule = { default: { name: 'TestComponent' } }
-      const to = createMockLocation('/other-page/')
-      router._setCurrentRoute(createMockLocation('/test/'))
-      const originalHref = location.href
-
-      ;(manager as any).updatePageChunk(to, mockModule)
-
-      expect(location.href).not.toBe(originalHref)
+      expect(mockRoutes['/test/'].loader).toBe(originalLoader)
+      expect((manager as any).pendingLoaderRestore).toBeNull()
     })
   })
 
   describe('applyRecoveredModule', () => {
-    it('sets _pageChunk on pending target meta', () => {
+    it('sets _pageChunk on current route when path matches', async () => {
       manager.init()
       const mockModule = { default: { name: 'TestComponent' } }
       ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', mockModule)
       router._setCurrentRoute(createMockLocation('/test/'))
-      const pendingTarget = createMockLocation('/other-page/')
-      ;(manager as any).pendingTarget = pendingTarget
+      const to = createMockLocation('/test/')
 
-      ;(manager as any).applyRecoveredModule('https://example.com/assets/page.js')
+      await (manager as any).applyRecoveredModule('https://example.com/assets/page.js', to)
 
-      expect(pendingTarget.meta._pageChunk).toBe(mockModule)
+      expect(router.currentRoute.value.meta._pageChunk).toBe(mockModule)
     })
 
-    it('does nothing if module not found', () => {
+    it('does nothing if module not found', async () => {
       manager.init()
       router._setCurrentRoute(createMockLocation('/test/'))
+      const to = createMockLocation('/test/')
 
-      ;(manager as any).applyRecoveredModule('https://example.com/assets/nonexistent.js')
+      await (manager as any).applyRecoveredModule('https://example.com/assets/nonexistent.js', to)
 
       expect(router.currentRoute.value.meta._pageChunk).toBeUndefined()
     })
 
-    it('does not call router.replace (avoids infinite loop)', () => {
+    it('patches route loader and calls router.replace when path differs', async () => {
       manager.init()
       const mockModule = { default: { name: 'TestComponent' } }
       ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', mockModule)
       router._setCurrentRoute(createMockLocation('/test/'))
-      const pendingTarget = createMockLocation('/other-page/')
-      ;(manager as any).pendingTarget = pendingTarget
+      const to = createMockLocation('/other-page/')
+      const mockRoutes = {
+        '/other-page/': { loader: () => Promise.resolve({}) }
+      }
+      ;(manager as any).routes = mockRoutes
 
-      ;(manager as any).applyRecoveredModule('https://example.com/assets/page.js')
+      await (manager as any).applyRecoveredModule('https://example.com/assets/page.js', to)
+
+      expect(router.replace).toHaveBeenCalledWith('/other-page/')
+      expect((manager as any).pendingLoaderRestore).toBeTruthy()
+      expect((manager as any).pendingLoaderRestore.path).toBe('/other-page/')
+      await expect(mockRoutes['/other-page/'].loader()).resolves.toBe(mockModule)
+    })
+
+    it('falls back when routes not available and path differs', async () => {
+      manager.init()
+      const mockModule = { default: { name: 'TestComponent' } }
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', mockModule)
+      router._setCurrentRoute(createMockLocation('/test/'))
+      const to = createMockLocation('/other-page/')
+      ;(manager as any).routes = null
+
+      await (manager as any).applyRecoveredModule('https://example.com/assets/page.js', to)
 
       expect(router.replace).not.toHaveBeenCalled()
     })

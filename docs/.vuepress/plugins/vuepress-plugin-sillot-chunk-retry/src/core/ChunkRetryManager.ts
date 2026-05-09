@@ -239,6 +239,11 @@ class ToastUI {
   }
 }
 
+interface LoaderRestore {
+  path: string
+  originalLoader: () => Promise<any>
+}
+
 export class ChunkRetryManager {
   private router: RouterLike
   private options: Required<ChunkRetryOptions>
@@ -251,11 +256,17 @@ export class ChunkRetryManager {
   private preloadErrorHandler: ((ev: Event) => void) | null = null
   private pendingTarget: RouteLocationNormalized | null = null
   private unhandledRejectionHandler: ((ev: PromiseRejectionEvent) => void) | null = null
+  private routes: Record<string, any> | null = null
+  private pendingLoaderRestore: LoaderRestore | null = null
 
   constructor(router: RouterLike, options: ChunkRetryOptions = {}) {
     this.router = router
     this.options = { ...DEFAULT_OPTIONS, ...options }
     this.toast = new ToastUI(this.options.showToast)
+  }
+
+  setRoutes(routes: Record<string, any>): void {
+    this.routes = routes
   }
 
   init(): void {
@@ -266,6 +277,11 @@ export class ChunkRetryManager {
     })
 
     this.router.afterEach(() => {
+      if (this.pendingLoaderRestore) {
+        const { path, originalLoader } = this.pendingLoaderRestore
+        this.restoreRouteLoader(path, originalLoader)
+        this.pendingLoaderRestore = null
+      }
       if (this.isRecovering) return
       this.retryCount = 0
       this.recoveredModules.clear()
@@ -345,7 +361,7 @@ export class ChunkRetryManager {
     this.toast.show('detect', '资源加载失败', shortUrl)
 
     if (failedUrl && this.recoveredModules.has(failedUrl)) {
-      this.applyRecoveredModule(failedUrl)
+      this.applyRecoveredModule(failedUrl, to)
       return
     }
 
@@ -372,7 +388,7 @@ export class ChunkRetryManager {
 
       if (this.recoveryGeneration !== generation) return
 
-      this.updatePageChunk(to, module)
+      await this.applyRecoveredModule(failedUrl, to)
 
       this.isRecovering = false
       sessionStorage.removeItem(this.options.retryKey)
@@ -409,23 +425,46 @@ export class ChunkRetryManager {
     })
   }
 
-  private updatePageChunk(to: RouteLocationNormalized, module: any): void {
+  private async applyRecoveredModule(failedUrl: string, to: RouteLocationNormalized): Promise<void> {
+    const module = this.recoveredModules.get(failedUrl)
+    if (!module) return
+
     const current = this.router.currentRoute.value as RouteLocationNormalized
     if (current.meta && (current.path === to.path || current.fullPath === to.fullPath)) {
       current.meta._pageChunk = module
+      return
+    }
+
+    const originalLoader = this.patchRouteLoader(to.path, module)
+    if (originalLoader) {
+      this.pendingLoaderRestore = { path: to.path, originalLoader }
+      try {
+        await this.router.replace(to.fullPath)
+      } catch {
+        this.restoreRouteLoader(to.path, originalLoader)
+        this.pendingLoaderRestore = null
+        this.fallbackNavigation(to)
+      }
     } else {
       this.fallbackNavigation(to)
     }
   }
 
-  private applyRecoveredModule(failedUrl: string): void {
-    const module = this.recoveredModules.get(failedUrl)
-    if (!module) return
+  private patchRouteLoader(path: string, module: any): (() => Promise<any>) | null {
+    if (!this.routes) return null
+    const routesObj = this.routes.value || this.routes
+    const route = routesObj[path]
+    if (!route || typeof route.loader !== 'function') return null
+    const originalLoader = route.loader
+    route.loader = () => Promise.resolve(module)
+    return originalLoader
+  }
 
-    const pending = this.pendingTarget
-    if (pending && pending.meta) {
-      pending.meta._pageChunk = module
-    }
+  private restoreRouteLoader(path: string, originalLoader: () => Promise<any>): void {
+    if (!this.routes) return
+    const routesObj = this.routes.value || this.routes
+    const route = routesObj[path]
+    if (route) route.loader = originalLoader
   }
 
   private fallbackNavigation(to: RouteLocationNormalized): void {
