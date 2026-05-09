@@ -91,4 +91,9 @@ describe('extractFailedUrl', () => {
     const error = new Error('Failed to fetch dynamically imported module: https://example.com/assets/页面-abc.js')
     expect(extractFailedUrl(error)).toBe('https://example.com/assets/页面-abc.js')
   })
+
+  it('extracts URL with URL-encoded Chinese characters', () => {
+    const error = new Error('Failed to fetch dynamically imported module: https://example.com/assets/git%20tag%20%E5%92%8C%20branch%20%E7%9A%84%E5%8C%BA%E5%88%AB%E4%BB%A5%E5%8F%8A%E4%BD%BF%E7%94%A8%E5%9C%BA%E6%99%AF-DjchU1y6.js')
+    expect(extractFailedUrl(error)).toBe('https://example.com/assets/git%20tag%20%E5%92%8C%20branch%20%E7%9A%84%E5%8C%BA%E5%88%AB%E4%BB%A5%E5%8F%8A%E4%BD%BF%E7%94%A8%E5%9C%BA%E6%99%AF-DjchU1y6.js')
+  })
 })

@@ -434,9 +434,17 @@ function CHAOS_INJECT_SCRIPT() {
 
   const S=document.createElement('style');
   S.textContent=\`
-#chaos-fab{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#f0883e,#da3633);color:#fff;border:none;cursor:pointer;font-size:24px;z-index:999999;box-shadow:0 4px 16px rgba(240,136,62,.5);transition:transform .2s,box-shadow .2s;display:flex;align-items:center;justify-content:center}
-#chaos-fab:hover{transform:scale(1.1);box-shadow:0 6px 24px rgba(240,136,62,.7)}
-#chaos-fab.active{transform:rotate(45deg)}
+#chaos-fab{position:fixed;bottom:24px;right:24px;height:36px;border-radius:18px;border:none;cursor:pointer;z-index:999999;box-shadow:0 4px 16px rgba(240,136,62,.5);transition:transform .2s,box-shadow .2s;display:flex;align-items:center;gap:6px;padding:0 12px 0 10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#f0883e,#da3633);color:#fff}
+#chaos-fab:hover{transform:scale(1.05);box-shadow:0 6px 24px rgba(240,136,62,.7)}
+#chaos-fab.active{background:linear-gradient(135deg,#da3633,#a0201a)}
+#chaos-fab .fab-icon{font-size:16px;line-height:1}
+#chaos-fab .fab-info{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;white-space:nowrap}
+#chaos-fab .fab-preset{opacity:.9}
+#chaos-fab .fab-sep{opacity:.4}
+#chaos-fab .fab-stat{display:flex;align-items:center;gap:2px;opacity:.85}
+#chaos-fab .fab-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+#chaos-fab .fab-dot.on{background:#3fb950}
+#chaos-fab .fab-dot.off{background:#f85149}
 #chaos-panel{position:fixed;bottom:88px;right:24px;width:380px;max-height:calc(100vh - 120px);overflow-y:auto;background:#0d1117;border:1px solid #30363d;border-radius:12px;z-index:999998;box-shadow:0 8px 32px rgba(0,0,0,.6);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#c9d1d9;display:none;scrollbar-width:thin;scrollbar-color:#30363d #0d1117}
 #chaos-panel.open{display:block}
 #chaos-panel *{box-sizing:border-box}
@@ -488,8 +496,8 @@ function CHAOS_INJECT_SCRIPT() {
 
   const fab=document.createElement('button');
   fab.id='chaos-fab';
-  fab.textContent='🔥';
   fab.title='Network Chaos Panel';
+  fab.innerHTML='<span class="fab-icon">🔥</span><span class="fab-info"><span class="fab-dot off" id="fabDot"></span><span class="fab-preset" id="fabPreset">--</span><span class="fab-sep">|</span><span class="fab-stat">❌<span id="fabFail">0</span></span></span>';
   document.body.appendChild(fab);
 
   const panel=document.createElement('div');
@@ -559,8 +567,8 @@ function CHAOS_INJECT_SCRIPT() {
   function cWs(){
     const p=location.protocol==='https:'?'wss:':'ws:';
     ws=new WebSocket(p+'//'+location.host+'/__chaos__/ws');
-    ws.onopen=()=>{document.getElementById('cpDot').className='cp-dot on';document.getElementById('cpWs').innerHTML='<span class="cp-dot on" id="cpDot"></span>已连接'};
-    ws.onclose=()=>{document.getElementById('cpDot').className='cp-dot off';document.getElementById('cpWs').innerHTML='<span class="cp-dot off" id="cpDot"></span>已断开';setTimeout(cWs,2000)};
+    ws.onopen=()=>{document.getElementById('cpDot').className='cp-dot on';document.getElementById('cpWs').innerHTML='<span class="cp-dot on" id="cpDot"></span>已连接';document.getElementById('fabDot').className='fab-dot on'};
+    ws.onclose=()=>{document.getElementById('cpDot').className='cp-dot off';document.getElementById('cpWs').innerHTML='<span class="cp-dot off" id="cpDot"></span>已断开';document.getElementById('fabDot').className='fab-dot off';setTimeout(cWs,2000)};
     ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='state')updUI(m.config,m.stats)};
   }
 
@@ -585,7 +593,17 @@ function CHAOS_INJECT_SCRIPT() {
       document.getElementById('csDelay').textContent=s.delayed;
       document.getElementById('csPoll').textContent=s.polluted;
       document.getElementById('csThrot').textContent=s.throttled;
+      document.getElementById('fabFail').textContent=s.failed;
     }
+    var presetLabel='自定义';
+    if(!c.enabled) presetLabel='关闭';
+    else if(c.volatility.failRate===.1&&c.speed.latency===200) presetLabel='轻度';
+    else if(c.volatility.failRate===.25&&c.speed.latency===500) presetLabel='中度';
+    else if(c.volatility.failRate===.5&&c.dns.enabled) presetLabel='重度';
+    else if(c.dns.enabled&&c.volatility.failRate===0) presetLabel='DNS';
+    else if(c.speed.bandwidth>0&&c.volatility.failRate===0&&!c.dns.enabled) presetLabel='慢速';
+    else if(c.speed.burstEnabled&&c.volatility.failRate>0) presetLabel='突发';
+    document.getElementById('fabPreset').textContent=presetLabel;
   }
 
   function updDisp(el){
@@ -639,17 +657,19 @@ function CHAOS_INJECT_SCRIPT() {
     burst:{enabled:true,volatility:{failRate:.15,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:100,jitter:50,burstEnabled:true,burstCycle:8,burstSlowDuration:2,burstSlowMultiplier:30}},
     off:{enabled:false,volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:0,jitter:0,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
   };
+  const PL={light:'轻度',medium:'中度',heavy:'重度',dns:'DNS',slow:'慢速',burst:'突发',off:'关闭'};
   panel.querySelectorAll('.cp-pbtn').forEach(b=>{
     b.addEventListener('click',()=>{
       const pr=PR[b.dataset.p];if(!pr)return;
       panel.querySelectorAll('.cp-pbtn').forEach(x=>x.classList.remove('on'));
       b.classList.add('on');
+      document.getElementById('fabPreset').textContent=PL[b.dataset.p]||'自定义';
       try{localStorage.setItem('__chaos_preset',b.dataset.p)}catch(e){}
       if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'config',config:pr}));
     });
   });
 
-  try{var sp=localStorage.getItem('__chaos_preset');if(sp){var sb=panel.querySelector('.cp-pbtn[data-p="'+sp+'"]');if(sb)sb.classList.add('on')}}catch(e){}
+  try{var sp=localStorage.getItem('__chaos_preset');if(sp){var sb=panel.querySelector('.cp-pbtn[data-p="'+sp+'"]');if(sb){sb.classList.add('on');document.getElementById('fabPreset').textContent=PL[sp]||'自定义'}}}catch(e){}
 
   cWs();
   })();`

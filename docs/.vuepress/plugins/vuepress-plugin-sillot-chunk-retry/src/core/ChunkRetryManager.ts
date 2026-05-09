@@ -266,6 +266,7 @@ export class ChunkRetryManager {
     })
 
     this.router.afterEach(() => {
+      if (this.isRecovering) return
       this.retryCount = 0
       this.recoveredModules.clear()
       sessionStorage.removeItem(this.options.retryKey)
@@ -289,7 +290,22 @@ export class ChunkRetryManager {
       event.preventDefault()
 
       if (this.recoveredModules.has(failedUrl)) {
-        this.applyRecoveredModule(failedUrl)
+        const module = this.recoveredModules.get(failedUrl)
+        const current = this.router.currentRoute.value as RouteLocationNormalized
+        const pending = this.pendingTarget
+
+        if (pending && pending.meta) {
+          pending.meta._pageChunk = module
+        }
+        if (current.meta) {
+          current.meta._pageChunk = module
+        }
+
+        if (pending && current.fullPath !== pending.fullPath) {
+          this.router.replace(pending.fullPath).catch(() => {
+            this.fallbackNavigation(pending)
+          })
+        }
         return
       }
 
@@ -394,14 +410,25 @@ export class ChunkRetryManager {
   private async retryImportWithCacheBusting(url: string): Promise<any> {
     const separator = url.includes('?') ? '&' : '?'
     const retryUrl = `${url}${separator}t=${Date.now()}`
-    return import(/* @vite-ignore */ retryUrl)
+    const TIMEOUT_MS = 15000
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`import timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS)
+      import(/* @vite-ignore */ retryUrl).then(
+        (mod) => { clearTimeout(timer); resolve(mod) },
+        (err) => { clearTimeout(timer); reject(err) },
+      )
+    })
   }
 
   private updatePageChunk(to: RouteLocationNormalized, module: any): void {
     const current = this.router.currentRoute.value as RouteLocationNormalized
-    if (current.meta && current.path === to.path) {
+    if (current.meta && (current.path === to.path || current.fullPath === to.fullPath)) {
       current.meta._pageChunk = module
     } else {
+      const pending = this.pendingTarget
+      if (pending && pending.meta) {
+        pending.meta._pageChunk = module
+      }
       this.router.replace(to.fullPath).catch(() => {
         this.fallbackNavigation(to)
       })
@@ -415,6 +442,14 @@ export class ChunkRetryManager {
     const current = this.router.currentRoute.value as RouteLocationNormalized
     if (current.meta) {
       current.meta._pageChunk = module
+    }
+
+    const pending = this.pendingTarget
+    if (pending && pending.meta && current.fullPath !== pending.fullPath) {
+      pending.meta._pageChunk = module
+      this.router.replace(pending.fullPath).catch(() => {
+        this.fallbackNavigation(pending)
+      })
     }
   }
 
@@ -434,10 +469,16 @@ export class ChunkRetryManager {
     if (!url) return '(unknown)'
     try {
       const u = new URL(url, location.origin)
-      const parts = u.pathname.split('/')
-      return parts.length > 2 ? '.../' + parts.slice(-2).join('/') : u.pathname
+      const decoded = decodeURIComponent(u.pathname)
+      const parts = decoded.split('/')
+      return parts.length > 2 ? '.../' + parts.slice(-2).join('/') : decoded
     } catch {
-      return url.length > 50 ? url.slice(0, 47) + '...' : url
+      try {
+        const decoded = decodeURIComponent(url)
+        return decoded.length > 50 ? decoded.slice(0, 47) + '...' : decoded
+      } catch {
+        return url.length > 50 ? url.slice(0, 47) + '...' : url
+      }
     }
   }
 }

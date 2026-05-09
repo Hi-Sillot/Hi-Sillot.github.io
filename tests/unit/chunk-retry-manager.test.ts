@@ -90,7 +90,7 @@ describe('ChunkRetryManager', () => {
   })
 
   describe('afterEach', () => {
-    it('clears retryCount in afterEach', () => {
+    it('clears retryCount in afterEach when not recovering', () => {
       manager.init()
       sessionStorage.setItem('test-retry', '123')
       ;(manager as any).retryCount = 5
@@ -99,11 +99,25 @@ describe('ChunkRetryManager', () => {
       expect(sessionStorage.getItem('test-retry')).toBeNull()
     })
 
-    it('clears recoveredModules in afterEach', () => {
+    it('clears recoveredModules in afterEach when not recovering', () => {
       manager.init()
       ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
       router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
       expect((manager as any).recoveredModules.size).toBe(0)
+    })
+
+    it('does NOT clear state in afterEach when isRecovering is true', () => {
+      manager.init()
+      ;(manager as any).isRecovering = true
+      ;(manager as any).retryCount = 5
+      sessionStorage.setItem('test-retry', '123')
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
+
+      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
+
+      expect((manager as any).retryCount).toBe(5)
+      expect(sessionStorage.getItem('test-retry')).toBe('123')
+      expect((manager as any).recoveredModules.size).toBe(1)
     })
   })
 
@@ -270,6 +284,19 @@ describe('ChunkRetryManager', () => {
       expect(router.currentRoute.value.meta._pageChunk).toBe(mockModule)
     })
 
+    it('sets _pageChunk on current route when fullPath matches but path differs', () => {
+      manager.init()
+      const mockModule = { default: { name: 'TestComponent' } }
+      const to = createMockLocation('/test/')
+      to.path = '/test'
+      to.fullPath = '/test/'
+      router._setCurrentRoute({ path: '/test/', fullPath: '/test/', name: 'test-page', matched: [], meta: {} })
+
+      ;(manager as any).updatePageChunk(to, mockModule)
+
+      expect(router.currentRoute.value.meta._pageChunk).toBe(mockModule)
+    })
+
     it('calls router.replace when current path does not match target', () => {
       manager.init()
       const mockModule = { default: { name: 'TestComponent' } }
@@ -301,6 +328,21 @@ describe('ChunkRetryManager', () => {
       ;(manager as any).applyRecoveredModule('https://example.com/assets/nonexistent.js')
 
       expect(router.currentRoute.value.meta._pageChunk).toBeUndefined()
+    })
+
+    it('navigates to pending target when it differs from current route', () => {
+      manager.init()
+      const mockModule = { default: { name: 'TestComponent' } }
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', mockModule)
+      router._setCurrentRoute(createMockLocation('/test/'))
+      const pendingTarget = createMockLocation('/other-page/')
+      ;(manager as any).pendingTarget = pendingTarget
+
+      ;(manager as any).applyRecoveredModule('https://example.com/assets/page.js')
+
+      expect(router.currentRoute.value.meta._pageChunk).toBe(mockModule)
+      expect(pendingTarget.meta._pageChunk).toBe(mockModule)
+      expect(router.replace).toHaveBeenCalledWith('/other-page/')
     })
   })
 
@@ -346,6 +388,38 @@ describe('ChunkRetryManager', () => {
       expect((defaultManager as any).options.maxRetries).toBe(3)
       expect((defaultManager as any).options.retryDelay).toBe(1000)
       expect((defaultManager as any).options.retryKey).toBe('chunk-retry-attempted')
+    })
+  })
+
+  describe('shortenUrl', () => {
+    it('decodes URL-encoded Chinese characters in pathname', () => {
+      manager.init()
+      const result = (manager as any).shortenUrl('https://example.com/assets/git%20tag%20%E5%92%8C%20branch-DjchU1y6.js')
+      expect(result).toBe('.../assets/git tag 和 branch-DjchU1y6.js')
+    })
+
+    it('decodes URL-encoded spaces in pathname', () => {
+      manager.init()
+      const result = (manager as any).shortenUrl('https://example.com/assets/my%20page-abc.js')
+      expect(result).toBe('.../assets/my page-abc.js')
+    })
+
+    it('returns (unknown) for null URL', () => {
+      manager.init()
+      const result = (manager as any).shortenUrl(null)
+      expect(result).toBe('(unknown)')
+    })
+
+    it('shortens long pathnames to last two segments', () => {
+      manager.init()
+      const result = (manager as any).shortenUrl('https://example.com/some/deep/path/assets/page-abc.js')
+      expect(result).toBe('.../assets/page-abc.js')
+    })
+
+    it('handles relative URLs with encoded characters', () => {
+      manager.init()
+      const result = (manager as any).shortenUrl('/assets/%E4%B8%AD%E6%96%87-page.js')
+      expect(result).toBe('.../assets/中文-page.js')
     })
   })
 
