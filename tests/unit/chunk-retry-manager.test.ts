@@ -297,28 +297,31 @@ describe('ChunkRetryManager', () => {
       expect(router.currentRoute.value.meta._pageChunk).toBe(mockModule)
     })
 
-    it('calls router.replace when current path does not match target', () => {
+    it('falls back to full page navigation when current path does not match target', () => {
       manager.init()
       const mockModule = { default: { name: 'TestComponent' } }
       const to = createMockLocation('/other-page/')
       router._setCurrentRoute(createMockLocation('/test/'))
+      const originalHref = location.href
 
       ;(manager as any).updatePageChunk(to, mockModule)
 
-      expect(router.replace).toHaveBeenCalledWith('/other-page/')
+      expect(location.href).not.toBe(originalHref)
     })
   })
 
   describe('applyRecoveredModule', () => {
-    it('sets _pageChunk on current route meta', () => {
+    it('sets _pageChunk on pending target meta', () => {
       manager.init()
       const mockModule = { default: { name: 'TestComponent' } }
       ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', mockModule)
       router._setCurrentRoute(createMockLocation('/test/'))
+      const pendingTarget = createMockLocation('/other-page/')
+      ;(manager as any).pendingTarget = pendingTarget
 
       ;(manager as any).applyRecoveredModule('https://example.com/assets/page.js')
 
-      expect(router.currentRoute.value.meta._pageChunk).toBe(mockModule)
+      expect(pendingTarget.meta._pageChunk).toBe(mockModule)
     })
 
     it('does nothing if module not found', () => {
@@ -330,7 +333,7 @@ describe('ChunkRetryManager', () => {
       expect(router.currentRoute.value.meta._pageChunk).toBeUndefined()
     })
 
-    it('navigates to pending target when it differs from current route', () => {
+    it('does not call router.replace (avoids infinite loop)', () => {
       manager.init()
       const mockModule = { default: { name: 'TestComponent' } }
       ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', mockModule)
@@ -340,9 +343,7 @@ describe('ChunkRetryManager', () => {
 
       ;(manager as any).applyRecoveredModule('https://example.com/assets/page.js')
 
-      expect(router.currentRoute.value.meta._pageChunk).toBe(mockModule)
-      expect(pendingTarget.meta._pageChunk).toBe(mockModule)
-      expect(router.replace).toHaveBeenCalledWith('/other-page/')
+      expect(router.replace).not.toHaveBeenCalled()
     })
   })
 

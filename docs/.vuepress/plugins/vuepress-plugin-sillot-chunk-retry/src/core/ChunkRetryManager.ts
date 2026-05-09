@@ -291,20 +291,9 @@ export class ChunkRetryManager {
 
       if (this.recoveredModules.has(failedUrl)) {
         const module = this.recoveredModules.get(failedUrl)
-        const current = this.router.currentRoute.value as RouteLocationNormalized
         const pending = this.pendingTarget
-
         if (pending && pending.meta) {
           pending.meta._pageChunk = module
-        }
-        if (current.meta) {
-          current.meta._pageChunk = module
-        }
-
-        if (pending && current.fullPath !== pending.fullPath) {
-          this.router.replace(pending.fullPath).catch(() => {
-            this.fallbackNavigation(pending)
-          })
         }
         return
       }
@@ -425,13 +414,7 @@ export class ChunkRetryManager {
     if (current.meta && (current.path === to.path || current.fullPath === to.fullPath)) {
       current.meta._pageChunk = module
     } else {
-      const pending = this.pendingTarget
-      if (pending && pending.meta) {
-        pending.meta._pageChunk = module
-      }
-      this.router.replace(to.fullPath).catch(() => {
-        this.fallbackNavigation(to)
-      })
+      this.fallbackNavigation(to)
     }
   }
 
@@ -439,17 +422,9 @@ export class ChunkRetryManager {
     const module = this.recoveredModules.get(failedUrl)
     if (!module) return
 
-    const current = this.router.currentRoute.value as RouteLocationNormalized
-    if (current.meta) {
-      current.meta._pageChunk = module
-    }
-
     const pending = this.pendingTarget
-    if (pending && pending.meta && current.fullPath !== pending.fullPath) {
+    if (pending && pending.meta) {
       pending.meta._pageChunk = module
-      this.router.replace(pending.fullPath).catch(() => {
-        this.fallbackNavigation(pending)
-      })
     }
   }
 
