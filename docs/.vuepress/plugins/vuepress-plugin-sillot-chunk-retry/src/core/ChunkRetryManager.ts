@@ -240,7 +240,7 @@ class ToastUI {
 }
 
 interface LoaderRestore {
-  path: string
+  routeKey: string
   originalLoader: () => Promise<any>
 }
 
@@ -260,6 +260,8 @@ export class ChunkRetryManager {
   private routes: Record<string, any> | null = null
   private pendingLoaderRestore: LoaderRestore | null = null
   private isApplyingModule = false
+  private resolveRoutePathFn: ((pathname: string, currentPath?: string) => string) | null = null
+  private lastRecoveredPath: string | null = null
 
   constructor(router: RouterLike, options: ChunkRetryOptions = {}) {
     this.router = router
@@ -271,6 +273,10 @@ export class ChunkRetryManager {
     this.routes = routes
   }
 
+  setResolveRoutePath(fn: (pathname: string, currentPath?: string) => string): void {
+    this.resolveRoutePathFn = fn
+  }
+
   init(): void {
     if (typeof window === 'undefined') return
 
@@ -279,25 +285,34 @@ export class ChunkRetryManager {
 
       if (this.pathModules.has(to.path) && this.routes) {
         const module = this.pathModules.get(to.path)
-        const originalLoader = this.patchRouteLoader(to.path, module)
-        if (originalLoader) {
-          this.pendingLoaderRestore = { path: to.path, originalLoader }
+        const result = this.patchRouteLoader(to.path, module)
+        if (result) {
+          this.pendingLoaderRestore = { routeKey: result.routeKey, originalLoader: result.originalLoader }
         }
       }
     })
 
     this.router.afterEach(() => {
       if (this.pendingLoaderRestore) {
-        const { path, originalLoader } = this.pendingLoaderRestore
-        this.restoreRouteLoader(path, originalLoader)
+        const { routeKey, originalLoader } = this.pendingLoaderRestore
+        this.restoreRouteLoader(routeKey, originalLoader)
         this.pendingLoaderRestore = null
       }
-      if (this.isRecovering) return
+
+      if (this.isRecovering || this.isApplyingModule) return
+
       this.retryCount = 0
-      this.recoveredModules.clear()
       this.pathModules.clear()
       sessionStorage.removeItem(this.options.retryKey)
       this.toast.dismissAll()
+
+      if (this.lastRecoveredPath !== null) {
+        const currentPath = this.router.currentRoute.value?.path
+        if (currentPath && currentPath !== this.lastRecoveredPath) {
+          this.recoveredModules.clear()
+          this.lastRecoveredPath = null
+        }
+      }
     })
 
     this.router.onError((error: Error, to: RouteLocationNormalized) => {
@@ -318,18 +333,10 @@ export class ChunkRetryManager {
       event.preventDefault()
 
       if (this.recoveredModules.has(failedUrl)) {
-        const module = this.recoveredModules.get(failedUrl)
-        const pending = this.pendingTarget
-        if (pending && pending.meta) {
-          pending.meta._pageChunk = module
-        }
         return
       }
 
       if (this.isRecovering || this.isApplyingModule) return
-
-      const target = this.pendingTarget || (this.router.currentRoute.value as RouteLocationNormalized)
-      this.handleChunkFailure(error, target)
     }) as (ev: Event) => void
 
     window.addEventListener('vite:preloadError', this.preloadErrorHandler)
@@ -374,6 +381,7 @@ export class ChunkRetryManager {
 
     if (failedUrl && this.recoveredModules.has(failedUrl)) {
       this.pathModules.set(to.path, this.recoveredModules.get(failedUrl))
+      this.lastRecoveredPath = to.path
       this.isApplyingModule = true
       this.router.replace(to.fullPath).then(() => {
         this.isApplyingModule = false
@@ -406,6 +414,7 @@ export class ChunkRetryManager {
       const module = await this.retryImportWithCacheBusting(failedUrl)
       this.recoveredModules.set(failedUrl, module)
       this.pathModules.set(to.path, module)
+      this.lastRecoveredPath = to.path
 
       if (this.recoveryGeneration !== generation) return
 
@@ -452,44 +461,55 @@ export class ChunkRetryManager {
     })
   }
 
-  private patchRouteLoader(path: string, module: any): (() => Promise<any>) | null {
+  private patchRouteLoader(path: string, module: any): { routeKey: string; originalLoader: () => Promise<any> } | null {
     if (!this.routes) return null
     const routesObj = this.routes.value || this.routes
-    const candidates = [path, path.replace(/\/$/, ''), path + '/', path.replace(/\.html$/, ''), path + '.html']
-    for (const key of candidates) {
-      const route = routesObj[key]
-      if (route && typeof route.loader === 'function') {
-        const originalLoader = route.loader
-        route.loader = () => Promise.resolve(module)
-        return originalLoader
+
+    let routeKey: string | null = null
+
+    if (this.resolveRoutePathFn) {
+      try {
+        const resolved = this.resolveRoutePathFn(path)
+        if (routesObj[resolved] && typeof routesObj[resolved].loader === 'function') {
+          routeKey = resolved
+        }
+      } catch { /* fall through */ }
+    }
+
+    if (!routeKey) {
+      const candidates = [path, path.replace(/\/$/, ''), path + '/', path.replace(/\.html$/, ''), path + '.html']
+      for (const key of candidates) {
+        const route = routesObj[key]
+        if (route && typeof route.loader === 'function') {
+          routeKey = key
+          break
+        }
       }
     }
-    for (const [key, route] of Object.entries(routesObj)) {
-      if (typeof route.loader === 'function' && (key === path || path.startsWith(key) || key.startsWith(path))) {
-        const originalLoader = route.loader
-        route.loader = () => Promise.resolve(module)
-        return originalLoader
+
+    if (!routeKey) {
+      for (const [key, route] of Object.entries(routesObj)) {
+        if (typeof route.loader === 'function' && (key === path || path.startsWith(key) || key.startsWith(path))) {
+          routeKey = key
+          break
+        }
       }
     }
-    return null
+
+    if (!routeKey) return null
+
+    const route = routesObj[routeKey]
+    const originalLoader = route.loader
+    route.loader = () => Promise.resolve(module)
+    return { routeKey, originalLoader }
   }
 
-  private restoreRouteLoader(path: string, originalLoader: () => Promise<any>): void {
+  private restoreRouteLoader(routeKey: string, originalLoader: () => Promise<any>): void {
     if (!this.routes) return
     const routesObj = this.routes.value || this.routes
-    const candidates = [path, path.replace(/\/$/, ''), path + '/', path.replace(/\.html$/, ''), path + '.html']
-    for (const key of candidates) {
-      const route = routesObj[key]
-      if (route && typeof route.loader === 'function') {
-        route.loader = originalLoader
-        return
-      }
-    }
-    for (const [key, route] of Object.entries(routesObj)) {
-      if (typeof route.loader === 'function' && (key === path || path.startsWith(key) || key.startsWith(path))) {
-        route.loader = originalLoader
-        return
-      }
+    const route = routesObj[routeKey]
+    if (route && typeof route.loader === 'function') {
+      route.loader = originalLoader
     }
   }
 

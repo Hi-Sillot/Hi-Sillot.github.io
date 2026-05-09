@@ -99,13 +99,6 @@ describe('ChunkRetryManager', () => {
       expect(sessionStorage.getItem('test-retry')).toBeNull()
     })
 
-    it('clears recoveredModules in afterEach when not recovering', () => {
-      manager.init()
-      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
-      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
-      expect((manager as any).recoveredModules.size).toBe(0)
-    })
-
     it('does NOT clear state in afterEach when isRecovering is true', () => {
       manager.init()
       ;(manager as any).isRecovering = true
@@ -119,6 +112,44 @@ describe('ChunkRetryManager', () => {
       expect(sessionStorage.getItem('test-retry')).toBe('123')
       expect((manager as any).recoveredModules.size).toBe(1)
     })
+
+    it('does NOT clear state in afterEach when isApplyingModule is true', () => {
+      manager.init()
+      ;(manager as any).isApplyingModule = true
+      ;(manager as any).retryCount = 5
+      sessionStorage.setItem('test-retry', '123')
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
+      ;(manager as any).pathModules.set('/test/', { default: {} })
+
+      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
+
+      expect((manager as any).retryCount).toBe(5)
+      expect((manager as any).pathModules.size).toBe(1)
+      expect((manager as any).recoveredModules.size).toBe(1)
+    })
+
+    it('preserves recoveredModules when navigating to the same recovered path', () => {
+      manager.init()
+      ;(manager as any).lastRecoveredPath = '/test/'
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
+      router._setCurrentRoute(createMockLocation('/test/'))
+
+      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
+
+      expect((manager as any).recoveredModules.size).toBe(1)
+    })
+
+    it('clears recoveredModules when navigating away from recovered path', () => {
+      manager.init()
+      ;(manager as any).lastRecoveredPath = '/test/'
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
+      router._setCurrentRoute(createMockLocation('/other-page/'))
+
+      router._guards.afterEach[0](createMockLocation('/other-page/'), createMockLocation('/test/'))
+
+      expect((manager as any).recoveredModules.size).toBe(0)
+      expect((manager as any).lastRecoveredPath).toBeNull()
+    })
   })
 
   describe('beforeEach', () => {
@@ -129,7 +160,7 @@ describe('ChunkRetryManager', () => {
       expect((manager as any).pendingTarget).toBe(target)
     })
 
-    it('uses pendingTarget in vite:preloadError handler', () => {
+    it('does not trigger recovery from vite:preloadError when no cached module', () => {
       manager.init()
       const target = createMockLocation('/other-page/', 'other-page')
       router._guards.beforeEach[0](target, createMockLocation('/test/'))
@@ -137,7 +168,7 @@ describe('ChunkRetryManager', () => {
       const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
       window.dispatchEvent(event)
 
-      expect((manager as any).isRecovering).toBe(true)
+      expect((manager as any).isRecovering).toBe(false)
     })
   })
 
@@ -202,13 +233,13 @@ describe('ChunkRetryManager', () => {
   })
 
   describe('handleChunkFailure via vite:preloadError', () => {
-    it('triggers recovery for valid preload error with URL', () => {
+    it('does NOT trigger recovery from preloadError - only suppresses error', () => {
       manager.init()
       const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
       window.dispatchEvent(event)
 
-      expect((manager as any).isRecovering).toBe(true)
-      expect(sessionStorage.getItem('test-retry')).not.toBeNull()
+      expect((manager as any).isRecovering).toBe(false)
+      expect(sessionStorage.getItem('test-retry')).toBeNull()
     })
 
     it('calls event.preventDefault to suppress Vite re-throw', () => {
@@ -232,7 +263,7 @@ describe('ChunkRetryManager', () => {
       expect((manager as any).isRecovering).toBe(false)
     })
 
-    it('applies recovered module when URL already in recoveredModules', () => {
+    it('does not start recovery when URL already in recoveredModules', () => {
       manager.init()
       const mockModule = { default: { name: 'TestComponent' } }
       ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', mockModule)
@@ -241,16 +272,27 @@ describe('ChunkRetryManager', () => {
       window.dispatchEvent(event)
 
       expect((manager as any).isRecovering).toBe(false)
+      expect(router.replace).not.toHaveBeenCalled()
     })
 
-    it('uses router.currentRoute.value as target route', () => {
+    it('does not start recovery when isRecovering is true', () => {
       manager.init()
-      router._setCurrentRoute(createMockLocation('/develop_notes/'))
+      ;(manager as any).isRecovering = true
 
-      const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/notes.js'))
+      const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
       window.dispatchEvent(event)
 
-      expect((manager as any).isRecovering).toBe(true)
+      expect(router.replace).not.toHaveBeenCalled()
+    })
+
+    it('does not start recovery when isApplyingModule is true', () => {
+      manager.init()
+      ;(manager as any).isApplyingModule = true
+
+      const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
+      window.dispatchEvent(event)
+
+      expect(router.replace).not.toHaveBeenCalled()
     })
   })
 
@@ -287,6 +329,41 @@ describe('ChunkRetryManager', () => {
 
       expect(mockRoutes['/test/'].loader()).resolves.toBe(mockModule)
       expect((manager as any).pendingLoaderRestore).toBeTruthy()
+      expect((manager as any).pendingLoaderRestore.routeKey).toBe('/test/')
+    })
+
+    it('uses resolveRoutePathFn to find route key', () => {
+      manager.init()
+      const mockModule = { default: { name: 'TestComponent' } }
+      ;(manager as any).pathModules.set('/test/', mockModule)
+      const mockRoutes = {
+        '/resolved-test/': { loader: () => Promise.resolve({ old: true }) }
+      }
+      ;(manager as any).routes = mockRoutes
+      ;(manager as any).resolveRoutePathFn = (pathname: string) => '/resolved-test/'
+
+      const to = createMockLocation('/test/')
+      router._guards.beforeEach[0](to, createMockLocation('/'))
+
+      expect(mockRoutes['/resolved-test/'].loader()).resolves.toBe(mockModule)
+      expect((manager as any).pendingLoaderRestore.routeKey).toBe('/resolved-test/')
+    })
+
+    it('falls back to candidate matching when resolveRoutePathFn fails', () => {
+      manager.init()
+      const mockModule = { default: { name: 'TestComponent' } }
+      ;(manager as any).pathModules.set('/test/', mockModule)
+      const mockRoutes = {
+        '/test/': { loader: () => Promise.resolve({ old: true }) }
+      }
+      ;(manager as any).routes = mockRoutes
+      ;(manager as any).resolveRoutePathFn = () => { throw new Error('not available') }
+
+      const to = createMockLocation('/test/')
+      router._guards.beforeEach[0](to, createMockLocation('/'))
+
+      expect(mockRoutes['/test/'].loader()).resolves.toBe(mockModule)
+      expect((manager as any).pendingLoaderRestore).toBeTruthy()
     })
 
     it('does not patch when pathModules has no entry', () => {
@@ -304,10 +381,10 @@ describe('ChunkRetryManager', () => {
   })
 
   describe('afterEach loader restore', () => {
-    it('restores original route loader in afterEach', () => {
+    it('restores original route loader in afterEach using routeKey', () => {
       manager.init()
       const originalLoader = () => Promise.resolve({ old: true })
-      ;(manager as any).pendingLoaderRestore = { path: '/test/', originalLoader }
+      ;(manager as any).pendingLoaderRestore = { routeKey: '/test/', originalLoader }
       const mockRoutes = {
         '/test/': { loader: () => Promise.resolve({ patched: true }) }
       }
@@ -411,17 +488,17 @@ describe('ChunkRetryManager', () => {
   })
 
   describe('coordination between handlers', () => {
-    it('preloadError triggers recovery that router.onError would also trigger', () => {
+    it('preloadError does not trigger recovery - only onError does', () => {
       manager.init()
       const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
       window.dispatchEvent(event)
 
-      expect((manager as any).isRecovering).toBe(true)
+      expect((manager as any).isRecovering).toBe(false)
 
       const onErrorFn = router._guards.onError[0]
       onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
 
-      expect(router.replace).not.toHaveBeenCalled()
+      expect((manager as any).isRecovering).toBe(true)
     })
 
     it('handleChunkFailure waits for already recovering process', () => {
