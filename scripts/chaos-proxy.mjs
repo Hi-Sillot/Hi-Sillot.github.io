@@ -17,6 +17,8 @@ const target = new URL(targetUrl)
 
 const config = {
   enabled: true,
+  scenario: 'off',
+  scenarioState: {},
   volatility: {
     failRate: 0,
     truncateRate: 0,
@@ -49,6 +51,9 @@ const stats = {
   startTime: Date.now(),
 }
 
+const requestLog = []
+const MAX_LOG = 50
+
 function resetStats() {
   stats.total = 0
   stats.failed = 0
@@ -57,6 +62,12 @@ function resetStats() {
   stats.polluted = 0
   stats.throttled = 0
   stats.startTime = Date.now()
+  requestLog.length = 0
+}
+
+function addLog(entry) {
+  requestLog.unshift(entry)
+  if (requestLog.length > MAX_LOG) requestLog.length = MAX_LOG
 }
 
 function matchExtension(url, extensions) {
@@ -74,6 +85,11 @@ function matchPattern(url, pattern) {
   } catch {
     return false
   }
+}
+
+function isChunkUrl(url) {
+  const pathname = new URL(url, 'http://dummy').pathname
+  return pathname.endsWith('.js') || pathname.endsWith('.css')
 }
 
 class ThrottleStream extends Transform {
@@ -156,6 +172,15 @@ function isBurstSlowPeriod() {
   return elapsed < slowSec
 }
 
+function isFlakyDownPeriod() {
+  const cycleSec = (config.scenarioState.flakyCycleSec || 8)
+  const downSec = (config.scenarioState.flakyDownSec || 3)
+  const elapsed = (Date.now() / 1000) % cycleSec
+  return elapsed >= (cycleSec - downSec)
+}
+
+const versionUpdateFailedUrls = new Set()
+
 const proxy = httpProxy.createProxyServer({
   target: target.href,
   changeOrigin: true,
@@ -218,6 +243,7 @@ const server = http.createServer((req, res) => {
 
   const reqUrl = req.url
   const isCacheBust = new URL(reqUrl, 'http://dummy').searchParams.has('t')
+  const startTime = Date.now()
 
   stats.total++
 
@@ -226,9 +252,79 @@ const server = http.createServer((req, res) => {
     return
   }
 
+  if (config.scenario === 'flaky') {
+    if (isFlakyDownPeriod() && isChunkUrl(reqUrl)) {
+      stats.failed++
+      scheduleBroadcast()
+      addLog({ url: reqUrl, method: req.method, status: 503, duration: Date.now() - startTime, interference: '弱网断开', timestamp: Date.now() })
+      res.writeHead(503, { 'Content-Type': 'text/plain' })
+      res.end('Service Unavailable (flaky network - down period)')
+      return
+    }
+    proxy.web(req, res)
+    return
+  }
+
+  if (config.scenario === 'version-update') {
+    if (isChunkUrl(reqUrl)) {
+      const pathname = new URL(reqUrl, 'http://dummy').pathname
+      if (!versionUpdateFailedUrls.has(pathname)) {
+        versionUpdateFailedUrls.add(pathname)
+        stats.failed++
+        scheduleBroadcast()
+        addLog({ url: reqUrl, method: req.method, status: 503, duration: Date.now() - startTime, interference: '版本更新(旧chunk)', timestamp: Date.now() })
+        res.writeHead(503, { 'Content-Type': 'text/plain' })
+        res.end('Service Unavailable (stale chunk - version update)')
+        return
+      }
+    }
+    proxy.web(req, res)
+    return
+  }
+
+  if (config.scenario === 'cdn-partial') {
+    const pattern = config.scenarioState.cdnPattern || '/assets/.*\\.js$'
+    if (matchPattern(reqUrl, pattern)) {
+      const failRate = config.scenarioState.cdnFailRate || 0.5
+      if (Math.random() < failRate) {
+        stats.failed++
+        scheduleBroadcast()
+        addLog({ url: reqUrl, method: req.method, status: 503, duration: Date.now() - startTime, interference: 'CDN局部故障', timestamp: Date.now() })
+        res.writeHead(503, { 'Content-Type': 'text/plain' })
+        res.end('Service Unavailable (CDN partial failure)')
+        return
+      }
+    }
+    proxy.web(req, res)
+    return
+  }
+
+  if (config.scenario === 'overload') {
+    const latency = config.scenarioState.overloadLatency || 2000
+    const failRate = config.scenarioState.overloadFailRate || 0.2
+    const truncateRate = config.scenarioState.overloadTruncateRate || 0.15
+    const jitter = config.scenarioState.overloadJitter || 1000
+
+    if (isChunkUrl(reqUrl) && Math.random() < failRate) {
+      stats.failed++
+      scheduleBroadcast()
+      addLog({ url: reqUrl, method: req.method, status: 503, duration: Date.now() - startTime, interference: '服务器过载(超时)', timestamp: Date.now() })
+      res.writeHead(503, { 'Content-Type': 'text/plain' })
+      res.end('Service Unavailable (server overload)')
+      return
+    }
+
+    const effectiveLatency = latency + Math.floor((Math.random() * 2 - 1) * jitter)
+    proxy.web(req, res)
+
+    const origProxyRes = proxy.listeners('proxyRes')
+    return
+  }
+
   if (config.dns.enabled && matchPattern(reqUrl, config.dns.pattern)) {
     stats.polluted++
     scheduleBroadcast()
+    addLog({ url: reqUrl, method: req.method, status: 502, duration: Date.now() - startTime, interference: 'DNS污染', timestamp: Date.now() })
     if (config.dns.mode === 'refuse') {
       res.writeHead(502, { 'Content-Type': 'text/plain' })
       res.end('ERR_CONNECTION_REFUSED (simulated DNS pollution)')
@@ -254,6 +350,7 @@ const server = http.createServer((req, res) => {
     if (rand < config.volatility.failRate) {
       stats.failed++
       scheduleBroadcast()
+      addLog({ url: reqUrl, method: req.method, status: 503, duration: Date.now() - startTime, interference: '随机失败', timestamp: Date.now() })
       res.writeHead(503, { 'Content-Type': 'text/plain' })
       res.end('Service Unavailable (simulated network failure)')
       return
@@ -262,6 +359,7 @@ const server = http.createServer((req, res) => {
     if (rand < config.volatility.failRate + config.volatility.resetRate) {
       stats.failed++
       scheduleBroadcast()
+      addLog({ url: reqUrl, method: req.method, status: 0, duration: Date.now() - startTime, interference: '连接重置', timestamp: Date.now() })
       res.writeHead(200, { 'Content-Type': 'application/octet-stream' })
       res.write('partial data...')
       res.destroy()
@@ -276,6 +374,7 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
   const reqUrl = req.url
   const isCacheBust = new URL(reqUrl, 'http://dummy').searchParams.has('t')
   const contentType = proxyRes.headers['content-type'] || ''
+  const startTime = req._chaosStartTime || Date.now()
 
   if (contentType.includes('text/html') && !isCacheBust) {
     injectChaosPanel(proxyRes, res)
@@ -288,6 +387,43 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
     return
   }
 
+  if (config.scenario === 'overload' && isChunkUrl(reqUrl)) {
+    const latency = config.scenarioState.overloadLatency || 2000
+    const jitter = config.scenarioState.overloadJitter || 1000
+    const truncateRate = config.scenarioState.overloadTruncateRate || 0.15
+    const effectiveLatency = Math.max(0, latency + Math.floor((Math.random() * 2 - 1) * jitter))
+
+    const shouldTruncate = Math.random() < truncateRate
+    const originalHeaders = { ...proxyRes.headers }
+    const bodyChunks = []
+    proxyRes.on('data', (chunk) => bodyChunks.push(chunk))
+    proxyRes.on('end', () => {
+      const body = Buffer.concat(bodyChunks)
+      setTimeout(() => {
+        if (res.destroyed) return
+        if (shouldTruncate) {
+          stats.truncated++
+          scheduleBroadcast()
+          addLog({ url: reqUrl, method: req.method, status: proxyRes.statusCode, duration: Date.now() - startTime, interference: '过载截断', timestamp: Date.now() })
+          const cutPoint = Math.floor(body.length * (0.3 + Math.random() * 0.4))
+          const headers = { ...originalHeaders }
+          delete headers['content-encoding']
+          delete headers['content-length']
+          delete headers['transfer-encoding']
+          res.writeHead(proxyRes.statusCode, headers)
+          res.end(body.slice(0, cutPoint))
+          return
+        }
+        stats.delayed++
+        scheduleBroadcast()
+        addLog({ url: reqUrl, method: req.method, status: proxyRes.statusCode, duration: Date.now() - startTime, interference: '过载延迟', timestamp: Date.now() })
+        res.writeHead(proxyRes.statusCode, originalHeaders)
+        res.end(body)
+      }, effectiveLatency)
+    })
+    return
+  }
+
   const shouldThrottle = config.speed.bandwidth > 0 || config.speed.latency > 0
   const shouldTruncate = matchExtension(reqUrl, config.volatility.targetExtensions) &&
     Math.random() < config.volatility.truncateRate
@@ -295,6 +431,7 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
   if (shouldTruncate && !shouldThrottle) {
     stats.truncated++
     scheduleBroadcast()
+    addLog({ url: reqUrl, method: req.method, status: proxyRes.statusCode, duration: Date.now() - startTime, interference: '截断', timestamp: Date.now() })
     const originalBody = []
     proxyRes.on('data', (chunk) => originalBody.push(chunk))
     proxyRes.on('end', () => {
@@ -387,6 +524,7 @@ function broadcastState() {
     type: 'state',
     config,
     stats: { ...stats, uptimeSec: Math.floor((Date.now() - stats.startTime) / 1000) },
+    log: requestLog.slice(0, 20),
   })
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) client.send(msg)
@@ -407,6 +545,7 @@ wss.on('connection', (ws) => {
     type: 'state',
     config,
     stats: { ...stats, uptimeSec: Math.floor((Date.now() - stats.startTime) / 1000) },
+    log: requestLog.slice(0, 20),
   }))
 
   ws.on('message', (data) => {
@@ -414,6 +553,9 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(data.toString())
       if (msg.type === 'config') {
         deepMerge(config, msg.config)
+        if (config.scenario === 'version-update') {
+          versionUpdateFailedUrls.clear()
+        }
         broadcastState()
       }
       if (msg.type === 'reset-stats') {
@@ -460,32 +602,26 @@ function CHAOS_INJECT_SCRIPT() {
 #chaos-fab .fab-dot{width:8px;height:8px;border-radius:50%;display:inline-block;transition:background .3s,box-shadow .3s}
 #chaos-fab .fab-dot.on{background:#3fb950;box-shadow:0 0 6px #3fb950}
 #chaos-fab .fab-dot.off{background:#f85149;box-shadow:0 0 6px #f85149}
-#chaos-fab.preset-off{border-color:rgba(139,148,158,.3);background:rgba(22,27,34,.92)}
-#chaos-fab.preset-off .fab-preset{color:#8b949e}
-#chaos-fab.preset-light{border-color:#3fb950;background:rgba(13,31,13,.92);box-shadow:0 0 20px rgba(63,185,80,.25)}
-#chaos-fab.preset-light .fab-preset{color:#3fb950}
-#chaos-fab.preset-light .fab-icon{animation:chaos-breathe-green 2s ease-in-out infinite}
-#chaos-fab.preset-medium{border-color:#d29922;background:rgba(31,26,13,.92);box-shadow:0 0 20px rgba(210,153,34,.3)}
-#chaos-fab.preset-medium .fab-preset{color:#d29922}
-#chaos-fab.preset-medium .fab-icon{animation:chaos-breathe-yellow 1.5s ease-in-out infinite}
-#chaos-fab.preset-heavy{border-color:#f85149;background:rgba(31,13,13,.92);box-shadow:0 0 24px rgba(248,81,73,.35)}
-#chaos-fab.preset-heavy .fab-preset{color:#f85149}
-#chaos-fab.preset-heavy .fab-icon{animation:chaos-breathe-red 1s ease-in-out infinite}
-#chaos-fab.preset-dns{border-color:#a371f7;background:rgba(21,13,31,.92);box-shadow:0 0 20px rgba(163,113,247,.3)}
-#chaos-fab.preset-dns .fab-preset{color:#a371f7}
-#chaos-fab.preset-dns .fab-icon{animation:chaos-breathe-purple 1.8s ease-in-out infinite}
-#chaos-fab.preset-slow{border-color:#58a6ff;background:rgba(13,20,31,.92);box-shadow:0 0 20px rgba(88,166,255,.25)}
-#chaos-fab.preset-slow .fab-preset{color:#58a6ff}
-#chaos-fab.preset-slow .fab-icon{animation:chaos-breathe-blue 2.5s ease-in-out infinite}
-#chaos-fab.preset-burst{border-color:#f0883e;background:rgba(31,20,13,.92);box-shadow:0 0 20px rgba(240,136,62,.3)}
-#chaos-fab.preset-burst .fab-preset{color:#f0883e}
-#chaos-fab.preset-burst .fab-icon{animation:chaos-burst .8s ease-in-out infinite}
-#chaos-fab.preset-custom{border-color:#f0883e;background:rgba(22,27,34,.92);box-shadow:0 0 16px rgba(240,136,62,.2)}
-#chaos-fab.preset-custom .fab-preset{color:#f0883e}
-#chaos-fab.flash{animation:chaos-flash .5s ease}
 #chaos-fab .fab-interfere{display:none;font-size:13px;line-height:1}
 #chaos-fab.interfering .fab-interfere{display:inline;animation:chaos-zap .4s ease infinite}
 #chaos-fab.interfered{animation:chaos-interfered .6s ease}
+#chaos-fab.preset-off{border-color:rgba(139,148,158,.3);background:rgba(22,27,34,.92)}
+#chaos-fab.preset-off .fab-preset{color:#8b949e}
+#chaos-fab.preset-flaky{border-color:#3fb950;background:rgba(13,31,13,.92);box-shadow:0 0 20px rgba(63,185,80,.25)}
+#chaos-fab.preset-flaky .fab-preset{color:#3fb950}
+#chaos-fab.preset-flaky .fab-icon{animation:chaos-breathe-green 2s ease-in-out infinite}
+#chaos-fab.preset-version-update{border-color:#f85149;background:rgba(31,13,13,.92);box-shadow:0 0 24px rgba(248,81,73,.35)}
+#chaos-fab.preset-version-update .fab-preset{color:#f85149}
+#chaos-fab.preset-version-update .fab-icon{animation:chaos-breathe-red 1s ease-in-out infinite}
+#chaos-fab.preset-cdn-partial{border-color:#a371f7;background:rgba(21,13,31,.92);box-shadow:0 0 20px rgba(163,113,247,.3)}
+#chaos-fab.preset-cdn-partial .fab-preset{color:#a371f7}
+#chaos-fab.preset-cdn-partial .fab-icon{animation:chaos-breathe-purple 1.8s ease-in-out infinite}
+#chaos-fab.preset-overload{border-color:#d29922;background:rgba(31,26,13,.92);box-shadow:0 0 20px rgba(210,153,34,.3)}
+#chaos-fab.preset-overload .fab-preset{color:#d29922}
+#chaos-fab.preset-overload .fab-icon{animation:chaos-breathe-yellow 1.5s ease-in-out infinite}
+#chaos-fab.preset-custom{border-color:#f0883e;background:rgba(22,27,34,.92);box-shadow:0 0 16px rgba(240,136,62,.2)}
+#chaos-fab.preset-custom .fab-preset{color:#f0883e}
+#chaos-fab.flash{animation:chaos-flash .5s ease}
 @keyframes chaos-zap{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes chaos-interfered{0%{filter:brightness(1)}20%{filter:brightness(2);transform:scale(1.08)}40%{filter:brightness(1.2)}60%{filter:brightness(1.8);transform:scale(1.04)}80%{filter:brightness(1.3)}100%{filter:brightness(1);transform:scale(1)}}
 @keyframes chaos-flash{0%{transform:scale(1)}25%{transform:scale(1.12);filter:brightness(1.4)}50%{transform:scale(.97)}75%{transform:scale(1.03)}100%{transform:scale(1);filter:brightness(1)}}
@@ -493,9 +629,8 @@ function CHAOS_INJECT_SCRIPT() {
 @keyframes chaos-breathe-yellow{0%,100%{transform:scale(1)}50%{transform:scale(1.18);filter:brightness(1.3)}}
 @keyframes chaos-breathe-red{0%,100%{transform:scale(1)}50%{transform:scale(1.22);filter:brightness(1.4)}}
 @keyframes chaos-breathe-purple{0%,100%{transform:scale(1)}50%{transform:scale(1.15);filter:brightness(1.2)}}
-@keyframes chaos-breathe-blue{0%,100%{transform:scale(1)}50%{transform:scale(1.1);filter:brightness(1.15)}}
-@keyframes chaos-burst{0%,100%{transform:scale(1)}15%{transform:scale(1.25);filter:brightness(1.5)}30%{transform:scale(.9)}45%{transform:scale(1.1)}60%{transform:scale(1)}}
-#chaos-panel{position:fixed;bottom:88px;right:24px;width:380px;max-height:calc(100vh - 120px);overflow-y:auto;background:#0d1117;border:1px solid #30363d;border-radius:12px;z-index:999998;box-shadow:0 8px 32px rgba(0,0,0,.6);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#c9d1d9;display:none;scrollbar-width:thin;scrollbar-color:#30363d #0d1117}
+#nprogress.chunk-error .bar{background:#f85149 !important;transition:all 2s ease !important;height:3px !important}
+#chaos-panel{position:fixed;bottom:88px;right:24px;width:400px;max-height:calc(100vh - 120px);overflow-y:auto;background:#0d1117;border:1px solid #30363d;border-radius:12px;z-index:999998;box-shadow:0 8px 32px rgba(0,0,0,.6);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#c9d1d9;display:none;scrollbar-width:thin;scrollbar-color:#30363d #0d1117}
 #chaos-panel.open{display:block}
 #chaos-panel *{box-sizing:border-box}
 .cp-hdr{padding:14px 16px;border-bottom:1px solid #30363d;display:flex;justify-content:space-between;align-items:center}
@@ -504,22 +639,32 @@ function CHAOS_INJECT_SCRIPT() {
 .cp-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
 .cp-dot.on{background:#3fb950}.cp-dot.off{background:#f85149}
 .cp-body{padding:12px 16px}
-.cp-master{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;background:#161b22;border:1px solid #30363d;border-radius:8px}
-.cp-master label{font-size:13px;font-weight:600}
-.cp-sw{position:relative;width:40px;height:22px;flex-shrink:0}
-.cp-sw input{opacity:0;width:0;height:0;position:absolute}
-.cp-sl{position:absolute;cursor:pointer;inset:0;background:#30363d;border-radius:22px;transition:.3s}
-.cp-sl:before{content:'';position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:#c9d1d9;border-radius:50%;transition:.3s}
-.cp-sw input:checked+.cp-sl{background:#f0883e}
-.cp-sw input:checked+.cp-sl:before{transform:translateX(18px)}
-.cp-presets{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
-.cp-pbtn{padding:5px 10px;border:1px solid #30363d;background:#161b22;color:#c9d1d9;border-radius:5px;cursor:pointer;font-size:11px;transition:.2s}
-.cp-pbtn:hover{border-color:#f0883e;color:#f0883e}
-.cp-pbtn.on{background:#f0883e;color:#0d1117;border-color:#f0883e}
+.cp-scenarios{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.cp-sbtn{padding:5px 10px;border:1px solid #30363d;background:#161b22;color:#c9d1d9;border-radius:5px;cursor:pointer;font-size:11px;transition:.2s}
+.cp-sbtn:hover{border-color:#f0883e;color:#f0883e}
+.cp-sbtn.on{background:#f0883e;color:#0d1117;border-color:#f0883e}
+.cp-status{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:10px 12px;background:#161b22;border:1px solid #30363d;border-radius:8px;font-size:12px}
+.cp-status-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.cp-status-dot.ok{background:#3fb950;box-shadow:0 0 6px #3fb950}
+.cp-status-dot.err{background:#f85149;box-shadow:0 0 6px #f85149}
+.cp-status-dot.warn{background:#d29922;box-shadow:0 0 6px #d29922}
 .cp-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
 .cp-st{background:#161b22;border:1px solid #30363d;border-radius:5px;padding:6px 8px;text-align:center}
 .cp-stv{font-size:16px;font-weight:700;color:#f0883e;font-variant-numeric:tabular-nums}
 .cp-stl{font-size:10px;color:#8b949e}
+.cp-log{background:#161b22;border:1px solid #30363d;border-radius:8px;margin-bottom:8px;overflow:hidden;max-height:200px;overflow-y:auto}
+.cp-log-hdr{padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none;font-size:13px;font-weight:600}
+.cp-log-hdr:hover{background:#1c2128}
+.cp-log-body{padding:0 12px 8px}
+.cp-log-item{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(48,54,61,.3)}
+.cp-log-item:last-child{border-bottom:none}
+.cp-log-icon{flex-shrink:0;width:16px;text-align:center}
+.cp-log-url{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8b949e}
+.cp-log-status{font-weight:700;min-width:28px;text-align:center}
+.cp-log-status.s2xx{color:#3fb950}
+.cp-log-status.s4xx,.cp-log-status.s5xx{color:#f85149}
+.cp-log-status.s0{color:#d29922}
+.cp-log-info{color:#6e7681;font-size:10px;min-width:80px;text-align:right}
 .cp-sec{background:#161b22;border:1px solid #30363d;border-radius:8px;margin-bottom:8px;overflow:hidden}
 .cp-shdr{padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
 .cp-shdr:hover{background:#1c2128}
@@ -555,16 +700,15 @@ function CHAOS_INJECT_SCRIPT() {
   panel.innerHTML=\`
 <div class="cp-hdr"><h2>🔥 Chaos Panel</h2><span class="cp-ws" id="cpWs"><span class="cp-dot off" id="cpDot"></span>连接中</span></div>
 <div class="cp-body">
-  <div class="cp-master"><label class="cp-sw"><input type="checkbox" id="cpOn" checked><span class="cp-sl"></span></label><label>混沌代理</label></div>
-  <div class="cp-presets">
-    <button class="cp-pbtn" data-p="light">🟢轻度</button>
-    <button class="cp-pbtn" data-p="medium">🟡中度</button>
-    <button class="cp-pbtn" data-p="heavy">🔴重度</button>
-    <button class="cp-pbtn" data-p="dns">🟣DNS</button>
-    <button class="cp-pbtn" data-p="slow">🐢慢速</button>
-    <button class="cp-pbtn" data-p="burst">⚡突发</button>
-    <button class="cp-pbtn" data-p="off">⚪关闭</button>
+  <div class="cp-scenarios">
+    <button class="cp-sbtn" data-s="flaky">📶弱网切换</button>
+    <button class="cp-sbtn" data-s="version-update">🔄版本更新</button>
+    <button class="cp-sbtn" data-s="cdn-partial">☁️CDN故障</button>
+    <button class="cp-sbtn" data-s="overload">📊服务器过载</button>
+    <button class="cp-sbtn" data-s="custom">⚙️自定义</button>
+    <button class="cp-sbtn" data-s="off">⚪关闭</button>
   </div>
+  <div class="cp-status" id="cpStatus"><span class="cp-status-dot ok" id="cpStatusDot"></span><span id="cpStatusText">网络正常</span><span style="flex:1"></span><span>失败: <strong id="csFailed2">0</strong></span><span style="margin-left:8px">总: <strong id="csTotal2">0</strong></span></div>
   <div class="cp-stats">
     <div class="cp-st"><div class="cp-stv" id="csTotal">0</div><div class="cp-stl">总请求</div></div>
     <div class="cp-st"><div class="cp-stv" id="csFailed">0</div><div class="cp-stl">失败</div></div>
@@ -573,33 +717,20 @@ function CHAOS_INJECT_SCRIPT() {
     <div class="cp-st"><div class="cp-stv" id="csPoll">0</div><div class="cp-stl">DNS污染</div></div>
     <div class="cp-st"><div class="cp-stv" id="csThrot">0</div><div class="cp-stl">限速</div></div>
   </div>
-  <div class="cp-sec open" id="csVol">
-    <div class="cp-shdr" data-sec="csVol"><span class="cp-stitle">🌊 网络波动</span><span class="cp-arr">▶</span></div>
+  <div class="cp-log" id="cpLog">
+    <div class="cp-log-hdr"><span>📋 请求日志</span><span id="cpLogCount">0</span></div>
+    <div class="cp-log-body" id="cpLogBody"></div>
+  </div>
+  <div class="cp-sec" id="csAdv">
+    <div class="cp-shdr" data-sec="csAdv"><span class="cp-stitle">⚙️ 高级设置</span><span class="cp-arr">▶</span></div>
     <div class="cp-sbody">
       <div class="cp-row"><span class="cp-lbl">失败概率</span><input type="range" min="0" max="100" value="0" data-p="volatility.failRate" data-s="0.01"><span class="cp-val" id="v-volatility.failRate">0%</span></div>
       <div class="cp-row"><span class="cp-lbl">截断概率</span><input type="range" min="0" max="100" value="0" data-p="volatility.truncateRate" data-s="0.01"><span class="cp-val" id="v-volatility.truncateRate">0%</span></div>
       <div class="cp-row"><span class="cp-lbl">连接重置</span><input type="range" min="0" max="100" value="0" data-p="volatility.resetRate" data-s="0.01"><span class="cp-val" id="v-volatility.resetRate">0%</span></div>
       <div class="cp-chk"><span class="cp-lbl">目标:</span><label><input type="checkbox" value=".js" data-ext checked>.js</label><label><input type="checkbox" value=".css" data-ext>.css</label><label><input type="checkbox" value=".html" data-ext>.html</label><label><input type="checkbox" value=".woff2" data-ext>.woff2</label></div>
-    </div>
-  </div>
-  <div class="cp-sec" id="csDns">
-    <div class="cp-shdr" data-sec="csDns"><span class="cp-stitle">🧪 DNS 污染</span><span class="cp-arr">▶</span></div>
-    <div class="cp-sbody">
-      <div class="cp-row"><span class="cp-lbl">启用</span><label class="cp-sw"><input type="checkbox" id="cpDnsOn"><span class="cp-sl"></span></label></div>
-      <div class="cp-row"><span class="cp-lbl">模式</span><select id="cpDnsMode"><option value="refuse">拒绝(502)</option><option value="empty">空响应(200)</option><option value="hijack">DNS劫持</option></select></div>
-      <div class="cp-row"><span class="cp-lbl">正则</span><input type="text" id="cpDnsPat" value="/assets/.*\\\\.js$"></div>
-    </div>
-  </div>
-  <div class="cp-sec" id="csSpd">
-    <div class="cp-shdr" data-sec="csSpd"><span class="cp-stitle">🐌 网速变化</span><span class="cp-arr">▶</span></div>
-    <div class="cp-sbody">
-      <div class="cp-row"><span class="cp-lbl">带宽</span><input type="range" min="0" max="1000" value="0" step="10" data-p="speed.bandwidth" data-s="1024" data-u=" KB/s"><span class="cp-val" id="v-speed.bandwidth">0 KB/s</span></div>
+      <div class="cp-row"><span class="cp-lbl">DNS污染</span><label class="cp-sw"><input type="checkbox" id="cpDnsOn"><span class="cp-sl"></span></label></div>
       <div class="cp-row"><span class="cp-lbl">延迟</span><input type="range" min="0" max="5000" value="0" step="50" data-p="speed.latency" data-s="1" data-u="ms"><span class="cp-val" id="v-speed.latency">0ms</span></div>
-      <div class="cp-row"><span class="cp-lbl">抖动</span><input type="range" min="0" max="2000" value="0" step="50" data-p="speed.jitter" data-s="1" data-u="ms"><span class="cp-val" id="v-speed.jitter">±0ms</span></div>
-      <div class="cp-row"><span class="cp-lbl">突发卡顿</span><label class="cp-sw"><input type="checkbox" id="cpBurst"><span class="cp-sl"></span></label></div>
-      <div class="cp-row"><span class="cp-lbl">周期</span><input type="range" min="3" max="30" value="10" step="1" data-p="speed.burstCycle" data-s="1" data-u="s"><span class="cp-val" id="v-speed.burstCycle">10s</span></div>
-      <div class="cp-row"><span class="cp-lbl">时长</span><input type="range" min="1" max="15" value="3" step="1" data-p="speed.burstSlowDuration" data-s="1" data-u="s"><span class="cp-val" id="v-speed.burstSlowDuration">3s</span></div>
-      <div class="cp-row"><span class="cp-lbl">倍率</span><input type="range" min="2" max="100" value="10" step="1" data-p="speed.burstSlowMultiplier" data-s="1" data-u="x"><span class="cp-val" id="v-speed.burstSlowMultiplier">10x</span></div>
+      <div class="cp-row"><span class="cp-lbl">带宽</span><input type="range" min="0" max="1000" value="0" step="10" data-p="speed.bandwidth" data-s="1024" data-u=" KB/s"><span class="cp-val" id="v-speed.bandwidth">0 KB/s</span></div>
     </div>
   </div>
   <button class="cp-reset" id="cpReset">🔄 重置统计</button>
@@ -613,22 +744,46 @@ function CHAOS_INJECT_SCRIPT() {
     h.onclick=()=>{document.getElementById(h.dataset.sec).classList.toggle('open')}
   });
 
+  const SCENARIOS={
+    'flaky':{enabled:true,scenario:'flaky',scenarioState:{flakyCycleSec:8,flakyDownSec:3},volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:0,jitter:0,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
+    'version-update':{enabled:true,scenario:'version-update',scenarioState:{},volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:0,jitter:0,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
+    'cdn-partial':{enabled:true,scenario:'cdn-partial',scenarioState:{cdnPattern:'/assets/.*\\\\\\\\.js$',cdnFailRate:0.5},volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:0,jitter:0,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
+    'overload':{enabled:true,scenario:'overload',scenarioState:{overloadLatency:2000,overloadFailRate:0.2,overloadTruncateRate:0.15,overloadJitter:1000},volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:0,jitter:0,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
+    'custom':{enabled:true,scenario:'custom',scenarioState:{},volatility:{failRate:.1,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:200,jitter:100,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
+    'off':{enabled:false,scenario:'off',scenarioState:{},volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:0,jitter:0,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
+  };
+  const SL={'flaky':'弱网切换','version-update':'版本更新','cdn-partial':'CDN故障','overload':'服务器过载','custom':'自定义','off':'关闭'};
+
   let ws;
   function cWs(){
     const p=location.protocol==='https:'?'wss:':'ws:';
     ws=new WebSocket(p+'//'+location.host+'/__chaos__/ws');
-    ws.onopen=()=>{document.getElementById('cpDot').className='cp-dot on';document.getElementById('cpWs').innerHTML='<span class="cp-dot on" id="cpDot"></span>已连接';document.getElementById('fabDot').className='fab-dot on'};
-    ws.onclose=()=>{document.getElementById('cpDot').className='cp-dot off';document.getElementById('cpWs').innerHTML='<span class="cp-dot off" id="cpDot"></span>已断开';document.getElementById('fabDot').className='fab-dot off';setTimeout(cWs,2000)};
-    ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='state')updUI(m.config,m.stats)};
+    ws.onopen=()=>{
+      document.getElementById('cpDot').className='cp-dot on';
+      document.getElementById('cpWs').innerHTML='<span class="cp-dot on" id="cpDot"></span>已连接';
+      document.getElementById('fabDot').className='fab-dot on';
+      try{
+        var sp=localStorage.getItem('__chaos_scenario');
+        if(sp&&SCENARIOS[sp]){
+          ws.send(JSON.stringify({type:'config',config:SCENARIOS[sp]}));
+        }
+      }catch(e){}
+    };
+    ws.onclose=()=>{
+      document.getElementById('cpDot').className='cp-dot off';
+      document.getElementById('cpWs').innerHTML='<span class="cp-dot off" id="cpDot"></span>已断开';
+      document.getElementById('fabDot').className='fab-dot off';
+      setTimeout(cWs,2000);
+    };
+    ws.onmessage=e=>{
+      const m=JSON.parse(e.data);
+      if(m.type==='state')updUI(m.config,m.stats,m.log);
+    };
   }
 
   var prevFailed=0;
-  function updUI(c,s){
-    document.getElementById('cpOn').checked=c.enabled;
+  function updUI(c,s,log){
     document.getElementById('cpDnsOn').checked=c.dns.enabled;
-    document.getElementById('cpDnsMode').value=c.dns.mode;
-    document.getElementById('cpDnsPat').value=c.dns.pattern;
-    document.getElementById('cpBurst').checked=c.speed.burstEnabled;
     panel.querySelectorAll('input[type="range"]').forEach(el=>{
       const p=el.dataset.p;if(!p)return;
       const sc=parseFloat(el.dataset.s)||1;
@@ -644,6 +799,8 @@ function CHAOS_INJECT_SCRIPT() {
       document.getElementById('csDelay').textContent=s.delayed;
       document.getElementById('csPoll').textContent=s.polluted;
       document.getElementById('csThrot').textContent=s.throttled;
+      document.getElementById('csTotal2').textContent=s.total;
+      document.getElementById('csFailed2').textContent=s.failed;
       document.getElementById('fabFail').textContent=s.failed;
       if(s.failed>prevFailed){
         fab.classList.add('interfered');
@@ -651,27 +808,45 @@ function CHAOS_INJECT_SCRIPT() {
         fab.classList.add('interfering');
         clearTimeout(fab._interfereTimer);
         fab._interfereTimer=setTimeout(function(){fab.classList.remove('interfering')},3000);
+        var np=document.getElementById('nprogress');
+        if(np)np.classList.add('chunk-error');
+        document.getElementById('cpStatusDot').className='cp-status-dot err';
+        document.getElementById('cpStatusText').textContent='网络干扰中';
+      } else if(s.failed===0&&s.total>0){
+        var np2=document.getElementById('nprogress');
+        if(np2)np2.classList.remove('chunk-error');
+        document.getElementById('cpStatusDot').className='cp-status-dot ok';
+        document.getElementById('cpStatusText').textContent='网络正常';
       }
       prevFailed=s.failed;
     }
-    var presetKey='custom';
-    if(!c.enabled) presetKey='off';
-    else if(c.volatility.failRate===.1&&c.speed.latency===200) presetKey='light';
-    else if(c.volatility.failRate===.25&&c.speed.latency===500) presetKey='medium';
-    else if(c.volatility.failRate===.5&&c.dns.enabled) presetKey='heavy';
-    else if(c.dns.enabled&&c.volatility.failRate===0) presetKey='dns';
-    else if(c.speed.bandwidth>0&&c.volatility.failRate===0&&!c.dns.enabled) presetKey='slow';
-    else if(c.speed.burstEnabled&&c.volatility.failRate>0) presetKey='burst';
-    var presetLabel=PL[presetKey]||'自定义';
-    document.getElementById('fabPreset').textContent=presetLabel;
-    var prevPreset=fab.dataset.preset;
-    if(prevPreset!==presetKey){
-      fab.dataset.preset=presetKey;
-      fab.className='preset-'+presetKey;
-      if(prevPreset!==undefined){
+    var sk=c.scenario||'off';
+    if(!c.enabled)sk='off';
+    var sLabel=SL[sk]||'自定义';
+    document.getElementById('fabPreset').textContent=sLabel;
+    var prevScenario=fab.dataset.preset;
+    if(prevScenario!==sk){
+      fab.dataset.preset=sk;
+      fab.className='preset-'+sk;
+      if(prevScenario!==undefined){
         fab.classList.add('flash');
         setTimeout(function(){fab.classList.remove('flash')},550);
       }
+    }
+    panel.querySelectorAll('.cp-sbtn').forEach(b=>{
+      b.classList.toggle('on',b.dataset.s===sk);
+    });
+    if(log&&log.length>0){
+      document.getElementById('cpLogCount').textContent=log.length;
+      var html='';
+      log.forEach(function(item){
+        var icon=item.status===0?'⚠️':item.status>=500?'❌':item.status>=400?'🚫':'✅';
+        var sClass=item.status===0?'s0':item.status>=400?'s4xx':'s2xx';
+        var shortUrl=item.url.replace(/^https?:\\/\\/[^/]+/,'');
+        if(shortUrl.length>40)shortUrl='...'+shortUrl.slice(-37);
+        html+='<div class="cp-log-item"><span class="cp-log-icon">'+icon+'</span><span class="cp-log-url" title="'+item.url+'">'+shortUrl+'</span><span class="cp-log-status '+sClass+'">'+item.status+'</span><span class="cp-log-info">'+item.duration+'ms'+(item.interference?' · '+item.interference:'')+'</span></div>';
+      });
+      document.getElementById('cpLogBody').innerHTML=html;
     }
   }
 
@@ -683,67 +858,66 @@ function CHAOS_INJECT_SCRIPT() {
     const d=document.getElementById('v-'+p);if(!d)return;
     if(p.includes('failRate')||p.includes('truncateRate')||p.includes('resetRate'))d.textContent=Math.round(v*100)+'%';
     else if(p==='speed.bandwidth')d.textContent=v>0?(v/1024).toFixed(0)+' KB/s':'0 KB/s';
-    else if(p==='speed.jitter')d.textContent='±'+v+u;
     else d.textContent=v+u;
   }
 
   function sendCfg(){
     if(!ws||ws.readyState!==WebSocket.OPEN)return;
     ws.send(JSON.stringify({type:'config',config:{
-      enabled:document.getElementById('cpOn').checked,
+      enabled:true,
+      scenario:'custom',
+      scenarioState:{},
       volatility:{
         failRate:parseFloat(panel.querySelector('[data-p="volatility.failRate"]')?.value||0)*0.01,
         truncateRate:parseFloat(panel.querySelector('[data-p="volatility.truncateRate"]')?.value||0)*0.01,
         resetRate:parseFloat(panel.querySelector('[data-p="volatility.resetRate"]')?.value||0)*0.01,
         targetExtensions:Array.from(panel.querySelectorAll('input[data-ext]:checked')).map(e=>e.value),
       },
-      dns:{enabled:document.getElementById('cpDnsOn').checked,mode:document.getElementById('cpDnsMode').value,pattern:document.getElementById('cpDnsPat').value},
+      dns:{enabled:document.getElementById('cpDnsOn').checked,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},
       speed:{
         bandwidth:parseFloat(panel.querySelector('[data-p="speed.bandwidth"]')?.value||0)*1024,
         latency:parseFloat(panel.querySelector('[data-p="speed.latency"]')?.value||0),
-        jitter:parseFloat(panel.querySelector('[data-p="speed.jitter"]')?.value||0),
-        burstEnabled:document.getElementById('cpBurst').checked,
-        burstCycle:parseFloat(panel.querySelector('[data-p="speed.burstCycle"]')?.value||10),
-        burstSlowDuration:parseFloat(panel.querySelector('[data-p="speed.burstSlowDuration"]')?.value||3),
-        burstSlowMultiplier:parseFloat(panel.querySelector('[data-p="speed.burstSlowMultiplier"]')?.value||10),
+        jitter:0,
+        burstEnabled:false,
+        burstCycle:10,
+        burstSlowDuration:3,
+        burstSlowMultiplier:10,
       },
     }}));
   }
 
   panel.querySelectorAll('input[type="range"]').forEach(el=>{el.addEventListener('input',()=>{updDisp(el);sendCfg()})});
-  ['cpOn','cpDnsOn','cpDnsMode','cpDnsPat','cpBurst'].forEach(id=>{
+  ['cpDnsOn'].forEach(id=>{
     document.getElementById(id).addEventListener('change',sendCfg);
   });
   panel.querySelectorAll('input[data-ext]').forEach(el=>el.addEventListener('change',sendCfg));
-  document.getElementById('cpReset').addEventListener('click',()=>{if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'reset-stats'}))});
-
-  const PR={
-    light:{enabled:true,volatility:{failRate:.1,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:200,jitter:100,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
-    medium:{enabled:true,volatility:{failRate:.25,truncateRate:.1,resetRate:.05,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:500,jitter:300,burstEnabled:true,burstCycle:8,burstSlowDuration:2,burstSlowMultiplier:20}},
-    heavy:{enabled:true,volatility:{failRate:.5,truncateRate:.2,resetRate:.1,targetExtensions:['.js','.css']},dns:{enabled:true,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:51200,latency:1000,jitter:500,burstEnabled:true,burstCycle:6,burstSlowDuration:3,burstSlowMultiplier:50}},
-    dns:{enabled:true,volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:true,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:0,jitter:0,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
-    slow:{enabled:true,volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:30720,latency:800,jitter:200,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
-    burst:{enabled:true,volatility:{failRate:.15,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:100,jitter:50,burstEnabled:true,burstCycle:8,burstSlowDuration:2,burstSlowMultiplier:30}},
-    off:{enabled:false,volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:0,jitter:0,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
-  };
-  const PL={light:'轻度',medium:'中度',heavy:'重度',dns:'DNS',slow:'慢速',burst:'突发',off:'关闭'};
-  panel.querySelectorAll('.cp-pbtn').forEach(b=>{
-    b.addEventListener('click',()=>{
-      const pr=PR[b.dataset.p];if(!pr)return;
-      panel.querySelectorAll('.cp-pbtn').forEach(x=>x.classList.remove('on'));
-      b.classList.add('on');
-      var pk=b.dataset.p;
-      document.getElementById('fabPreset').textContent=PL[pk]||'自定义';
-      fab.dataset.preset=pk;
-      fab.className='preset-'+pk;
-      fab.classList.add('flash');
-      setTimeout(function(){fab.classList.remove('flash')},550);
-      try{localStorage.setItem('__chaos_preset',pk)}catch(e){}
-      if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'config',config:pr}));
-    });
+  document.getElementById('cpReset').addEventListener('click',()=>{
+    if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'reset-stats'}));
+    var np=document.getElementById('nprogress');
+    if(np)np.classList.remove('chunk-error');
   });
 
-  try{var sp=localStorage.getItem('__chaos_preset');if(sp){var sb=panel.querySelector('.cp-pbtn[data-p="'+sp+'"]');if(sb){sb.classList.add('on');document.getElementById('fabPreset').textContent=PL[sp]||'自定义';fab.dataset.preset=sp;fab.className='preset-'+sp}}}catch(e){}
+  panel.querySelectorAll('.cp-sbtn').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const sc=SCENARIOS[b.dataset.s];if(!sc)return;
+      panel.querySelectorAll('.cp-sbtn').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      var sk=b.dataset.s;
+      document.getElementById('fabPreset').textContent=SL[sk]||'自定义';
+      fab.dataset.preset=sk;
+      fab.className='preset-'+sk;
+      fab.classList.add('flash');
+      setTimeout(function(){fab.classList.remove('flash')},550);
+      try{localStorage.setItem('__chaos_scenario',sk)}catch(e){}
+      if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'config',config:sc}));
+      if(sk==='off'){
+        var np=document.getElementById('nprogress');
+        if(np)np.classList.remove('chunk-error');
+        document.getElementById('cpStatusDot').className='cp-status-dot ok';
+        document.getElementById('cpStatusText').textContent='网络正常';
+      }
+    });
+  });
 
   cWs();
   })();`
@@ -765,6 +939,12 @@ server.listen(proxyPort, () => {
   console.log('')
   console.log(`  Proxy:     http://localhost:${proxyPort} → ${target.href}`)
   console.log(`  Panel:     页面右下角 🔥 悬浮按钮`)
+  console.log('')
+  console.log('  Scenarios:')
+  console.log('    📶 弱网切换  - 周期性正常↔断开')
+  console.log('    🔄 版本更新  - 首次chunk必定失败')
+  console.log('    ☁️  CDN故障  - 部分资源加载失败')
+  console.log('    📊 服务器过载 - 高延迟+超时')
   console.log('')
   console.log('  Usage:')
   console.log(`    浏览器打开 http://localhost:${proxyPort} 测试站点`)

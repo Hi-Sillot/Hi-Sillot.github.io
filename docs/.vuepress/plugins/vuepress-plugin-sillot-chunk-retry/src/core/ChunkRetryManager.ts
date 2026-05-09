@@ -234,6 +234,7 @@ class ToastUI {
 .chunk-retry-toast--fallback .chunk-retry-toast__msg{color:#d29922}
 .chunk-retry-toast--retrying .chunk-retry-toast__icon{animation:chunk-retry-spin 1.2s linear infinite}
 @keyframes chunk-retry-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+#nprogress.chunk-error .bar{background:#f85149 !important;transition:all 2s ease !important;height:3px !important}
 `
     document.head.appendChild(style)
   }
@@ -569,19 +570,13 @@ export class ChunkRetryManager {
   private signalNProgressError(): void {
     document.documentElement.style.setProperty('--nprogress-c', '#f85149')
     const nprogress = document.getElementById('nprogress')
-    if (!nprogress) return
-    const bar = nprogress.querySelector('[role="bar"]') as HTMLElement | null
-    if (!bar) return
-    bar.style.transition = 'all 2s ease'
+    if (nprogress) nprogress.classList.add('chunk-error')
   }
 
   private restoreNProgress(): void {
     document.documentElement.style.removeProperty('--nprogress-c')
     const nprogress = document.getElementById('nprogress')
-    if (!nprogress) return
-    const bar = nprogress.querySelector('[role="bar"]') as HTMLElement | null
-    if (!bar) return
-    bar.style.transition = ''
+    if (nprogress) nprogress.classList.remove('chunk-error')
   }
 
   private fallbackNavigation(to: RouteLocationNormalized): void {

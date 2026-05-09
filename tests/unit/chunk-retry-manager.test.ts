@@ -521,37 +521,31 @@ describe('ChunkRetryManager', () => {
   })
 
   describe('NProgress integration', () => {
-    it('signalNProgressError sets CSS variable and slows transition', () => {
+    it('signalNProgressError sets CSS variable and adds chunk-error class', () => {
       manager.init()
 
       const nprogress = document.createElement('div')
       nprogress.id = 'nprogress'
-      const bar = document.createElement('div')
-      bar.setAttribute('role', 'bar')
-      nprogress.appendChild(bar)
       document.body.appendChild(nprogress)
 
       ;(manager as any).signalNProgressError()
 
       expect(document.documentElement.style.getPropertyValue('--nprogress-c')).toBe('#f85149')
-      expect(bar.style.transition).toBe('all 2s ease')
+      expect(nprogress.classList.contains('chunk-error')).toBe(true)
     })
 
-    it('restoreNProgress removes CSS variable and resets transition', () => {
+    it('restoreNProgress removes CSS variable and chunk-error class', () => {
       manager.init()
 
       const nprogress = document.createElement('div')
       nprogress.id = 'nprogress'
-      const bar = document.createElement('div')
-      bar.setAttribute('role', 'bar')
-      nprogress.appendChild(bar)
       document.body.appendChild(nprogress)
 
       ;(manager as any).signalNProgressError()
       ;(manager as any).restoreNProgress()
 
       expect(document.documentElement.style.getPropertyValue('--nprogress-c')).toBe('')
-      expect(bar.style.transition).toBe('')
+      expect(nprogress.classList.contains('chunk-error')).toBe(false)
     })
 
     it('signalNProgressError is called when chunk failure is detected', () => {
