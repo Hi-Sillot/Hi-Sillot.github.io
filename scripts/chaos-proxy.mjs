@@ -161,6 +161,7 @@ const proxy = httpProxy.createProxyServer({
   changeOrigin: true,
   ws: true,
   followRedirects: true,
+  selfHandleResponse: true,
 })
 
 proxy.on('error', (err, req, res) => {
@@ -172,26 +173,24 @@ proxy.on('error', (err, req, res) => {
   }
 })
 
+const INJECT_MARKER = '</body>'
+const INJECT_SCRIPT = `<script>${CHAOS_INJECT_SCRIPT()}</script></body>`
+
 const server = http.createServer((req, res) => {
-  if (req.url === '/__chaos__' || req.url === '/__chaos__/') {
-    serveControlPanel(req, res)
-    return
-  }
-
-  if (req.url === '/__chaos__/api/config') {
-    serveJson(res, config)
-    return
-  }
-
-  if (req.url === '/__chaos__/api/stats') {
-    serveJson(res, { ...stats, uptimeSec: Math.floor((Date.now() - stats.startTime) / 1000) })
-    return
-  }
-
-  if (req.url === '/__chaos__/api/reset-stats' && req.method === 'POST') {
-    resetStats()
-    serveJson(res, { ok: true })
-    return
+  if (req.url.startsWith('/__chaos__/api/')) {
+    if (req.url === '/__chaos__/api/config') {
+      serveJson(res, config)
+      return
+    }
+    if (req.url === '/__chaos__/api/stats') {
+      serveJson(res, { ...stats, uptimeSec: Math.floor((Date.now() - stats.startTime) / 1000) })
+      return
+    }
+    if (req.url === '/__chaos__/api/reset-stats' && req.method === 'POST') {
+      resetStats()
+      serveJson(res, { ok: true })
+      return
+    }
   }
 
   if (!config.enabled) {
@@ -255,8 +254,18 @@ const server = http.createServer((req, res) => {
 proxy.on('proxyRes', (proxyRes, req, res) => {
   const reqUrl = req.url
   const isCacheBust = new URL(reqUrl, 'http://dummy').searchParams.has('t')
+  const contentType = proxyRes.headers['content-type'] || ''
 
-  if (!config.enabled || isCacheBust) return
+  if (contentType.includes('text/html') && !isCacheBust) {
+    injectChaosPanel(proxyRes, res)
+    return
+  }
+
+  if (!config.enabled || isCacheBust) {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers)
+    proxyRes.pipe(res)
+    return
+  }
 
   const shouldThrottle = config.speed.bandwidth > 0 || config.speed.latency > 0
   const shouldTruncate = matchExtension(reqUrl, config.volatility.targetExtensions) &&
@@ -285,7 +294,6 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
     if (effectiveLatency > 0) {
       stats.delayed++
       const originalHeaders = { ...proxyRes.headers }
-      proxyRes.headers['x-chaos-delay'] = String(effectiveLatency)
 
       setTimeout(() => {
         if (res.destroyed) return
@@ -318,9 +326,32 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
       const throttle = new ThrottleStream(effectiveBandwidth)
       res.writeHead(proxyRes.statusCode, proxyRes.headers)
       proxyRes.pipe(throttle).pipe(res)
+    } else {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers)
+      proxyRes.pipe(res)
     }
+  } else {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers)
+    proxyRes.pipe(res)
   }
 })
+
+function injectChaosPanel(proxyRes, res) {
+  const chunks = []
+  proxyRes.on('data', (chunk) => chunks.push(chunk))
+  proxyRes.on('end', () => {
+    let html = Buffer.concat(chunks).toString('utf-8')
+    const idx = html.toLowerCase().lastIndexOf('</body>')
+    if (idx !== -1) {
+      html = html.slice(0, idx) + INJECT_SCRIPT + html.slice(idx + INJECT_MARKER.length)
+    }
+    const headers = { ...proxyRes.headers }
+    delete headers['content-length']
+    delete headers['transfer-encoding']
+    res.writeHead(proxyRes.statusCode, headers)
+    res.end(html)
+  })
+}
 
 const wss = new WebSocketServer({ server, path: '/__chaos__/ws' })
 
@@ -376,358 +407,230 @@ function serveJson(res, data) {
   res.end(JSON.stringify(data))
 }
 
-function serveControlPanel(req, res) {
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-  res.end(CONTROL_PANEL_HTML)
-}
+function CHAOS_INJECT_SCRIPT() {
+  return `(function(){
+  if(window.__chaosPanelLoaded) return;
+  window.__chaosPanelLoaded=true;
 
-const CONTROL_PANEL_HTML = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔥 Network Chaos Control Panel</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
-  .container { max-width: 800px; margin: 0 auto; }
-  h1 { color: #f0883e; margin-bottom: 8px; font-size: 24px; }
-  .subtitle { color: #8b949e; margin-bottom: 20px; font-size: 14px; }
-  .master-toggle { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 12px 16px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; }
-  .master-toggle label { font-size: 16px; font-weight: 600; }
-  .switch { position: relative; width: 48px; height: 26px; }
-  .switch input { opacity: 0; width: 0; height: 0; }
-  .slider { position: absolute; cursor: pointer; inset: 0; background: #30363d; border-radius: 26px; transition: .3s; }
-  .slider:before { content: ''; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: #c9d1d9; border-radius: 50%; transition: .3s; }
-  .switch input:checked + .slider { background: #f0883e; }
-  .switch input:checked + .slider:before { transform: translateX(22px); }
-  .presets { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-  .preset-btn { padding: 8px 16px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; border-radius: 6px; cursor: pointer; font-size: 13px; transition: .2s; }
-  .preset-btn:hover { border-color: #f0883e; color: #f0883e; }
-  .preset-btn.active { background: #f0883e; color: #0d1117; border-color: #f0883e; }
-  .section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
-  .section-header { padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; }
-  .section-header:hover { background: #1c2128; }
-  .section-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .section-title .icon { font-size: 18px; }
-  .section-body { padding: 0 16px 16px; display: none; }
-  .section.open .section-body { display: block; }
-  .section.open .arrow { transform: rotate(90deg); }
-  .arrow { transition: transform .2s; font-size: 12px; color: #8b949e; }
-  .control-row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
-  .control-label { font-size: 13px; color: #8b949e; min-width: 100px; }
-  .control-value { font-size: 13px; color: #f0883e; min-width: 60px; text-align: right; font-variant-numeric: tabular-nums; }
-  input[type="range"] { flex: 1; margin: 0 12px; accent-color: #f0883e; height: 4px; }
-  input[type="text"], select { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 10px; border-radius: 4px; font-size: 13px; }
-  input[type="text"] { flex: 1; margin-left: 12px; }
-  select { margin-left: 12px; min-width: 140px; }
-  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-  .checkbox-row label { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #8b949e; cursor: pointer; padding: 4px 8px; border: 1px solid #30363d; border-radius: 4px; transition: .2s; }
-  .checkbox-row label:has(input:checked) { border-color: #f0883e; color: #f0883e; }
-  .checkbox-row input { accent-color: #f0883e; }
-  .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 20px; }
-  .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 10px 12px; text-align: center; }
-  .stat-value { font-size: 20px; font-weight: 700; color: #f0883e; font-variant-numeric: tabular-nums; }
-  .stat-label { font-size: 11px; color: #8b949e; margin-top: 2px; }
-  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-  .status-dot.connected { background: #3fb950; }
-  .status-dot.disconnected { background: #f85149; }
-  .ws-status { font-size: 12px; color: #8b949e; display: flex; align-items: center; gap: 4px; }
-  .reset-btn { padding: 6px 14px; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; cursor: pointer; font-size: 12px; }
-  .reset-btn:hover { border-color: #f85149; color: #f85149; }
-</style>
-</head>
-<body>
-<div class="container">
-  <h1>🔥 Network Chaos Control Panel</h1>
-  <div class="subtitle">实时控制网络混沌参数，测试 ChunkRetry 插件表现</div>
+  const S=document.createElement('style');
+  S.textContent=\`
+#chaos-fab{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#f0883e,#da3633);color:#fff;border:none;cursor:pointer;font-size:24px;z-index:999999;box-shadow:0 4px 16px rgba(240,136,62,.5);transition:transform .2s,box-shadow .2s;display:flex;align-items:center;justify-content:center}
+#chaos-fab:hover{transform:scale(1.1);box-shadow:0 6px 24px rgba(240,136,62,.7)}
+#chaos-fab.active{transform:rotate(45deg)}
+#chaos-panel{position:fixed;bottom:88px;right:24px;width:380px;max-height:calc(100vh - 120px);overflow-y:auto;background:#0d1117;border:1px solid #30363d;border-radius:12px;z-index:999998;box-shadow:0 8px 32px rgba(0,0,0,.6);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#c9d1d9;display:none;scrollbar-width:thin;scrollbar-color:#30363d #0d1117}
+#chaos-panel.open{display:block}
+#chaos-panel *{box-sizing:border-box}
+.cp-hdr{padding:14px 16px;border-bottom:1px solid #30363d;display:flex;justify-content:space-between;align-items:center}
+.cp-hdr h2{font-size:15px;color:#f0883e;margin:0}
+.cp-ws{font-size:11px;color:#8b949e;display:flex;align-items:center;gap:4px}
+.cp-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.cp-dot.on{background:#3fb950}.cp-dot.off{background:#f85149}
+.cp-body{padding:12px 16px}
+.cp-master{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;background:#161b22;border:1px solid #30363d;border-radius:8px}
+.cp-master label{font-size:13px;font-weight:600}
+.cp-sw{position:relative;width:40px;height:22px;flex-shrink:0}
+.cp-sw input{opacity:0;width:0;height:0;position:absolute}
+.cp-sl{position:absolute;cursor:pointer;inset:0;background:#30363d;border-radius:22px;transition:.3s}
+.cp-sl:before{content:'';position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:#c9d1d9;border-radius:50%;transition:.3s}
+.cp-sw input:checked+.cp-sl{background:#f0883e}
+.cp-sw input:checked+.cp-sl:before{transform:translateX(18px)}
+.cp-presets{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.cp-pbtn{padding:5px 10px;border:1px solid #30363d;background:#161b22;color:#c9d1d9;border-radius:5px;cursor:pointer;font-size:11px;transition:.2s}
+.cp-pbtn:hover{border-color:#f0883e;color:#f0883e}
+.cp-pbtn.on{background:#f0883e;color:#0d1117;border-color:#f0883e}
+.cp-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.cp-st{background:#161b22;border:1px solid #30363d;border-radius:5px;padding:6px 8px;text-align:center}
+.cp-stv{font-size:16px;font-weight:700;color:#f0883e;font-variant-numeric:tabular-nums}
+.cp-stl{font-size:10px;color:#8b949e}
+.cp-sec{background:#161b22;border:1px solid #30363d;border-radius:8px;margin-bottom:8px;overflow:hidden}
+.cp-shdr{padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
+.cp-shdr:hover{background:#1c2128}
+.cp-stitle{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
+.cp-sbody{padding:0 12px 10px;display:none}
+.cp-sec.open .cp-sbody{display:block}
+.cp-sec.open .cp-arr{transform:rotate(90deg)}
+.cp-arr{transition:transform .2s;font-size:10px;color:#8b949e}
+.cp-row{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.cp-lbl{font-size:12px;color:#8b949e;min-width:70px}
+.cp-val{font-size:12px;color:#f0883e;min-width:50px;text-align:right;font-variant-numeric:tabular-nums}
+.cp-row input[type="range"]{flex:1;margin:0 8px;accent-color:#f0883e;height:3px}
+.cp-row input[type="text"],.cp-row select{background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:4px 8px;border-radius:3px;font-size:12px}
+.cp-row input[type="text"]{flex:1;margin-left:8px}
+.cp-row select{margin-left:8px;min-width:120px}
+.cp-chk{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
+.cp-chk label{display:flex;align-items:center;gap:3px;font-size:11px;color:#8b949e;cursor:pointer;padding:3px 6px;border:1px solid #30363d;border-radius:3px;transition:.2s}
+.cp-chk label:has(input:checked){border-color:#f0883e;color:#f0883e}
+.cp-chk input{accent-color:#f0883e}
+.cp-reset{display:block;margin:8px auto 0;padding:5px 12px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;cursor:pointer;font-size:11px}
+.cp-reset:hover{border-color:#f85149;color:#f85149}
+\`;
+  document.head.appendChild(S);
 
-  <div class="master-toggle">
-    <label class="switch"><input type="checkbox" id="masterEnabled" checked><span class="slider"></span></label>
-    <label>混沌代理总开关</label>
-    <span class="ws-status" id="wsStatus"><span class="status-dot disconnected" id="wsDot"></span>连接中...</span>
+  const fab=document.createElement('button');
+  fab.id='chaos-fab';
+  fab.textContent='🔥';
+  fab.title='Network Chaos Panel';
+  document.body.appendChild(fab);
+
+  const panel=document.createElement('div');
+  panel.id='chaos-panel';
+  panel.innerHTML=\`
+<div class="cp-hdr"><h2>🔥 Chaos Panel</h2><span class="cp-ws" id="cpWs"><span class="cp-dot off" id="cpDot"></span>连接中</span></div>
+<div class="cp-body">
+  <div class="cp-master"><label class="cp-sw"><input type="checkbox" id="cpOn" checked><span class="cp-sl"></span></label><label>混沌代理</label></div>
+  <div class="cp-presets">
+    <button class="cp-pbtn" data-p="light">🟢轻度</button>
+    <button class="cp-pbtn" data-p="medium">🟡中度</button>
+    <button class="cp-pbtn" data-p="heavy">🔴重度</button>
+    <button class="cp-pbtn" data-p="dns">🟣DNS</button>
+    <button class="cp-pbtn" data-p="slow">🐢慢速</button>
+    <button class="cp-pbtn" data-p="burst">⚡突发</button>
+    <button class="cp-pbtn" data-p="off">⚪关闭</button>
   </div>
-
-  <div class="presets">
-    <button class="preset-btn" data-preset="light">🟢 轻度波动</button>
-    <button class="preset-btn" data-preset="medium">🟡 中度波动</button>
-    <button class="preset-btn" data-preset="heavy">🔴 重度波动</button>
-    <button class="preset-btn" data-preset="dns">🟣 DNS污染</button>
-    <button class="preset-btn" data-preset="slow">🐢 慢速网络</button>
-    <button class="preset-btn" data-preset="burst">⚡ 突发卡顿</button>
-    <button class="preset-btn" data-preset="off">⚪ 关闭</button>
+  <div class="cp-stats">
+    <div class="cp-st"><div class="cp-stv" id="csTotal">0</div><div class="cp-stl">总请求</div></div>
+    <div class="cp-st"><div class="cp-stv" id="csFailed">0</div><div class="cp-stl">失败</div></div>
+    <div class="cp-st"><div class="cp-stv" id="csTrunc">0</div><div class="cp-stl">截断</div></div>
+    <div class="cp-st"><div class="cp-stv" id="csDelay">0</div><div class="cp-stl">延迟</div></div>
+    <div class="cp-st"><div class="cp-stv" id="csPoll">0</div><div class="cp-stl">DNS污染</div></div>
+    <div class="cp-st"><div class="cp-stv" id="csThrot">0</div><div class="cp-stl">限速</div></div>
   </div>
-
-  <div class="stats-bar">
-    <div class="stat-card"><div class="stat-value" id="statTotal">0</div><div class="stat-label">总请求</div></div>
-    <div class="stat-card"><div class="stat-value" id="statFailed">0</div><div class="stat-label">失败</div></div>
-    <div class="stat-card"><div class="stat-value" id="statTruncated">0</div><div class="stat-label">截断</div></div>
-    <div class="stat-card"><div class="stat-value" id="statDelayed">0</div><div class="stat-label">延迟</div></div>
-    <div class="stat-card"><div class="stat-value" id="statPolluted">0</div><div class="stat-label">DNS污染</div></div>
-    <div class="stat-card"><div class="stat-value" id="statThrottled">0</div><div class="stat-label">限速</div></div>
-  </div>
-
-  <div class="section open" id="secVolatility">
-    <div class="section-header" onclick="toggleSection('secVolatility')">
-      <span class="section-title"><span class="icon">🌊</span> 网络波动</span>
-      <span class="arrow">▶</span>
-    </div>
-    <div class="section-body">
-      <div class="control-row">
-        <span class="control-label">失败概率</span>
-        <input type="range" min="0" max="100" value="0" data-path="volatility.failRate" data-scale="0.01">
-        <span class="control-value" id="val-volatility.failRate">0%</span>
-      </div>
-      <div class="control-row">
-        <span class="control-label">截断概率</span>
-        <input type="range" min="0" max="100" value="0" data-path="volatility.truncateRate" data-scale="0.01">
-        <span class="control-value" id="val-volatility.truncateRate">0%</span>
-      </div>
-      <div class="control-row">
-        <span class="control-label">连接重置</span>
-        <input type="range" min="0" max="100" value="0" data-path="volatility.resetRate" data-scale="0.01">
-        <span class="control-value" id="val-volatility.resetRate">0%</span>
-      </div>
-      <div class="checkbox-row">
-        <span class="control-label">目标文件:</span>
-        <label><input type="checkbox" value=".js" data-ext="true" checked>.js</label>
-        <label><input type="checkbox" value=".css" data-ext="true">.css</label>
-        <label><input type="checkbox" value=".html" data-ext="true">.html</label>
-        <label><input type="checkbox" value=".json" data-ext="true">.json</label>
-        <label><input type="checkbox" value=".woff2" data-ext="true">.woff2</label>
-      </div>
+  <div class="cp-sec open" id="csVol">
+    <div class="cp-shdr" data-sec="csVol"><span class="cp-stitle">🌊 网络波动</span><span class="cp-arr">▶</span></div>
+    <div class="cp-sbody">
+      <div class="cp-row"><span class="cp-lbl">失败概率</span><input type="range" min="0" max="100" value="0" data-p="volatility.failRate" data-s="0.01"><span class="cp-val" id="v-volatility.failRate">0%</span></div>
+      <div class="cp-row"><span class="cp-lbl">截断概率</span><input type="range" min="0" max="100" value="0" data-p="volatility.truncateRate" data-s="0.01"><span class="cp-val" id="v-volatility.truncateRate">0%</span></div>
+      <div class="cp-row"><span class="cp-lbl">连接重置</span><input type="range" min="0" max="100" value="0" data-p="volatility.resetRate" data-s="0.01"><span class="cp-val" id="v-volatility.resetRate">0%</span></div>
+      <div class="cp-chk"><span class="cp-lbl">目标:</span><label><input type="checkbox" value=".js" data-ext checked>.js</label><label><input type="checkbox" value=".css" data-ext>.css</label><label><input type="checkbox" value=".html" data-ext>.html</label><label><input type="checkbox" value=".woff2" data-ext>.woff2</label></div>
     </div>
   </div>
-
-  <div class="section" id="secDns">
-    <div class="section-header" onclick="toggleSection('secDns')">
-      <span class="section-title"><span class="icon">🧪</span> DNS 污染</span>
-      <span class="arrow">▶</span>
-    </div>
-    <div class="section-body">
-      <div class="control-row">
-        <span class="control-label">启用</span>
-        <label class="switch"><input type="checkbox" id="dnsEnabled"><span class="slider"></span></label>
-      </div>
-      <div class="control-row">
-        <span class="control-label">污染模式</span>
-        <select id="dnsMode">
-          <option value="refuse">拒绝连接 (502)</option>
-          <option value="empty">空响应 (200)</option>
-          <option value="hijack">DNS劫持</option>
-        </select>
-      </div>
-      <div class="control-row">
-        <span class="control-label">匹配正则</span>
-        <input type="text" id="dnsPattern" value="/assets/.*\\.js$">
-      </div>
+  <div class="cp-sec" id="csDns">
+    <div class="cp-shdr" data-sec="csDns"><span class="cp-stitle">🧪 DNS 污染</span><span class="cp-arr">▶</span></div>
+    <div class="cp-sbody">
+      <div class="cp-row"><span class="cp-lbl">启用</span><label class="cp-sw"><input type="checkbox" id="cpDnsOn"><span class="cp-sl"></span></label></div>
+      <div class="cp-row"><span class="cp-lbl">模式</span><select id="cpDnsMode"><option value="refuse">拒绝(502)</option><option value="empty">空响应(200)</option><option value="hijack">DNS劫持</option></select></div>
+      <div class="cp-row"><span class="cp-lbl">正则</span><input type="text" id="cpDnsPat" value="/assets/.*\\\\.js$"></div>
     </div>
   </div>
-
-  <div class="section" id="secSpeed">
-    <div class="section-header" onclick="toggleSection('secSpeed')">
-      <span class="section-title"><span class="icon">🐌</span> 网速变化</span>
-      <span class="arrow">▶</span>
-    </div>
-    <div class="section-body">
-      <div class="control-row">
-        <span class="control-label">带宽限制</span>
-        <input type="range" min="0" max="1000" value="0" step="10" data-path="speed.bandwidth" data-scale="1024" data-unit=" KB/s">
-        <span class="control-value" id="val-speed.bandwidth">0 KB/s</span>
-      </div>
-      <div class="control-row">
-        <span class="control-label">延迟</span>
-        <input type="range" min="0" max="5000" value="0" step="50" data-path="speed.latency" data-scale="1" data-unit="ms">
-        <span class="control-value" id="val-speed.latency">0ms</span>
-      </div>
-      <div class="control-row">
-        <span class="control-label">抖动</span>
-        <input type="range" min="0" max="2000" value="0" step="50" data-path="speed.jitter" data-scale="1" data-unit="ms">
-        <span class="control-value" id="val-speed.jitter">±0ms</span>
-      </div>
-      <div class="control-row">
-        <span class="control-label">突发卡顿</span>
-        <label class="switch"><input type="checkbox" id="burstEnabled"><span class="slider"></span></label>
-      </div>
-      <div class="control-row">
-        <span class="control-label">卡顿周期</span>
-        <input type="range" min="3" max="30" value="10" step="1" data-path="speed.burstCycle" data-scale="1" data-unit="s">
-        <span class="control-value" id="val-speed.burstCycle">10s</span>
-      </div>
-      <div class="control-row">
-        <span class="control-label">卡顿时长</span>
-        <input type="range" min="1" max="15" value="3" step="1" data-path="speed.burstSlowDuration" data-scale="1" data-unit="s">
-        <span class="control-value" id="val-speed.burstSlowDuration">3s</span>
-      </div>
-      <div class="control-row">
-        <span class="control-label">卡顿倍率</span>
-        <input type="range" min="2" max="100" value="10" step="1" data-path="speed.burstSlowMultiplier" data-scale="1" data-unit="x">
-        <span class="control-value" id="val-speed.burstSlowMultiplier">10x</span>
-      </div>
+  <div class="cp-sec" id="csSpd">
+    <div class="cp-shdr" data-sec="csSpd"><span class="cp-stitle">🐌 网速变化</span><span class="cp-arr">▶</span></div>
+    <div class="cp-sbody">
+      <div class="cp-row"><span class="cp-lbl">带宽</span><input type="range" min="0" max="1000" value="0" step="10" data-p="speed.bandwidth" data-s="1024" data-u=" KB/s"><span class="cp-val" id="v-speed.bandwidth">0 KB/s</span></div>
+      <div class="cp-row"><span class="cp-lbl">延迟</span><input type="range" min="0" max="5000" value="0" step="50" data-p="speed.latency" data-s="1" data-u="ms"><span class="cp-val" id="v-speed.latency">0ms</span></div>
+      <div class="cp-row"><span class="cp-lbl">抖动</span><input type="range" min="0" max="2000" value="0" step="50" data-p="speed.jitter" data-s="1" data-u="ms"><span class="cp-val" id="v-speed.jitter">±0ms</span></div>
+      <div class="cp-row"><span class="cp-lbl">突发卡顿</span><label class="cp-sw"><input type="checkbox" id="cpBurst"><span class="cp-sl"></span></label></div>
+      <div class="cp-row"><span class="cp-lbl">周期</span><input type="range" min="3" max="30" value="10" step="1" data-p="speed.burstCycle" data-s="1" data-u="s"><span class="cp-val" id="v-speed.burstCycle">10s</span></div>
+      <div class="cp-row"><span class="cp-lbl">时长</span><input type="range" min="1" max="15" value="3" step="1" data-p="speed.burstSlowDuration" data-s="1" data-u="s"><span class="cp-val" id="v-speed.burstSlowDuration">3s</span></div>
+      <div class="cp-row"><span class="cp-lbl">倍率</span><input type="range" min="2" max="100" value="10" step="1" data-p="speed.burstSlowMultiplier" data-s="1" data-u="x"><span class="cp-val" id="v-speed.burstSlowMultiplier">10x</span></div>
     </div>
   </div>
-
-  <div style="text-align:center; margin-top:16px;">
-    <button class="reset-btn" id="resetStatsBtn">🔄 重置统计</button>
-  </div>
+  <button class="cp-reset" id="cpReset">🔄 重置统计</button>
 </div>
+\`;
+  document.body.appendChild(panel);
 
-<script>
-let ws
-let currentConfig = null
+  fab.onclick=()=>{panel.classList.toggle('open');fab.classList.toggle('active')};
 
-function connectWs() {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  ws = new WebSocket(proto + '//' + location.host + '/__chaos__/ws')
-  ws.onopen = () => {
-    document.getElementById('wsDot').className = 'status-dot connected'
-    document.getElementById('wsStatus').innerHTML = '<span class="status-dot connected" id="wsDot"></span>已连接'
+  panel.querySelectorAll('.cp-shdr').forEach(h=>{
+    h.onclick=()=>{document.getElementById(h.dataset.sec).classList.toggle('open')}
+  });
+
+  let ws;
+  function cWs(){
+    const p=location.protocol==='https:'?'wss:':'ws:';
+    ws=new WebSocket(p+'//'+location.host+'/__chaos__/ws');
+    ws.onopen=()=>{document.getElementById('cpDot').className='cp-dot on';document.getElementById('cpWs').innerHTML='<span class="cp-dot on" id="cpDot"></span>已连接'};
+    ws.onclose=()=>{document.getElementById('cpDot').className='cp-dot off';document.getElementById('cpWs').innerHTML='<span class="cp-dot off" id="cpDot"></span>已断开';setTimeout(cWs,2000)};
+    ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='state')updUI(m.config,m.stats)};
   }
-  ws.onclose = () => {
-    document.getElementById('wsDot').className = 'status-dot disconnected'
-    document.getElementById('wsStatus').innerHTML = '<span class="status-dot disconnected" id="wsDot"></span>已断开'
-    setTimeout(connectWs, 2000)
-  }
-  ws.onmessage = (e) => {
-    const msg = JSON.parse(e.data)
-    if (msg.type === 'state') {
-      currentConfig = msg.config
-      updateUI(msg.config, msg.stats)
+
+  function updUI(c,s){
+    document.getElementById('cpOn').checked=c.enabled;
+    document.getElementById('cpDnsOn').checked=c.dns.enabled;
+    document.getElementById('cpDnsMode').value=c.dns.mode;
+    document.getElementById('cpDnsPat').value=c.dns.pattern;
+    document.getElementById('cpBurst').checked=c.speed.burstEnabled;
+    panel.querySelectorAll('input[type="range"]').forEach(el=>{
+      const p=el.dataset.p;if(!p)return;
+      const sc=parseFloat(el.dataset.s)||1;
+      let v=c;for(const k of p.split('.'))v=v?.[k];
+      if(v!==undefined)el.value=v/sc;
+      updDisp(el);
+    });
+    panel.querySelectorAll('input[data-ext]').forEach(el=>{el.checked=c.volatility.targetExtensions.includes(el.value)});
+    if(s){
+      document.getElementById('csTotal').textContent=s.total;
+      document.getElementById('csFailed').textContent=s.failed;
+      document.getElementById('csTrunc').textContent=s.truncated;
+      document.getElementById('csDelay').textContent=s.delayed;
+      document.getElementById('csPoll').textContent=s.polluted;
+      document.getElementById('csThrot').textContent=s.throttled;
     }
   }
-}
 
-function updateUI(cfg, st) {
-  document.getElementById('masterEnabled').checked = cfg.enabled
-  document.getElementById('dnsEnabled').checked = cfg.dns.enabled
-  document.getElementById('dnsMode').value = cfg.dns.mode
-  document.getElementById('dnsPattern').value = cfg.dns.pattern
-  document.getElementById('burstEnabled').checked = cfg.speed.burstEnabled
-
-  document.querySelectorAll('input[type="range"]').forEach(el => {
-    const path = el.dataset.path
-    if (!path) return
-    const scale = parseFloat(el.dataset.scale) || 1
-    const parts = path.split('.')
-    let val = cfg
-    for (const p of parts) val = val?.[p]
-    if (val !== undefined) el.value = val / scale
-    updateRangeDisplay(el)
-  })
-
-  document.querySelectorAll('input[data-ext]').forEach(el => {
-    const ext = el.value
-    el.checked = cfg.volatility.targetExtensions.includes(ext)
-  })
-
-  if (st) {
-    document.getElementById('statTotal').textContent = st.total
-    document.getElementById('statFailed').textContent = st.failed
-    document.getElementById('statTruncated').textContent = st.truncated
-    document.getElementById('statDelayed').textContent = st.delayed
-    document.getElementById('statPolluted').textContent = st.polluted
-    document.getElementById('statThrottled').textContent = st.throttled
-  }
-}
-
-function updateRangeDisplay(el) {
-  const path = el.dataset.path
-  if (!path) return
-  const scale = parseFloat(el.dataset.scale) || 1
-  const unit = el.dataset.unit || ''
-  const val = parseFloat(el.value) * scale
-  const displayEl = document.getElementById('val-' + path)
-  if (!displayEl) return
-
-  if (path === 'volatility.failRate' || path === 'volatility.truncateRate' || path === 'volatility.resetRate') {
-    displayEl.textContent = Math.round(val * 100) + '%'
-  } else if (path === 'speed.bandwidth') {
-    displayEl.textContent = val > 0 ? (val / 1024).toFixed(0) + ' KB/s' : '0 KB/s'
-  } else if (path === 'speed.latency' || path === 'speed.jitter') {
-    const prefix = path === 'speed.jitter' ? '±' : ''
-    displayEl.textContent = prefix + val + unit
-  } else {
-    displayEl.textContent = val + unit
-  }
-}
-
-function sendConfig() {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return
-
-  const cfg = {
-    enabled: document.getElementById('masterEnabled').checked,
-    volatility: {
-      failRate: parseFloat(document.querySelector('[data-path="volatility.failRate"]')?.value || 0) * 0.01,
-      truncateRate: parseFloat(document.querySelector('[data-path="volatility.truncateRate"]')?.value || 0) * 0.01,
-      resetRate: parseFloat(document.querySelector('[data-path="volatility.resetRate"]')?.value || 0) * 0.01,
-      targetExtensions: Array.from(document.querySelectorAll('input[data-ext]:checked')).map(el => el.value),
-    },
-    dns: {
-      enabled: document.getElementById('dnsEnabled').checked,
-      mode: document.getElementById('dnsMode').value,
-      pattern: document.getElementById('dnsPattern').value,
-    },
-    speed: {
-      bandwidth: parseFloat(document.querySelector('[data-path="speed.bandwidth"]')?.value || 0) * 1024,
-      latency: parseFloat(document.querySelector('[data-path="speed.latency"]')?.value || 0),
-      jitter: parseFloat(document.querySelector('[data-path="speed.jitter"]')?.value || 0),
-      burstEnabled: document.getElementById('burstEnabled').checked,
-      burstCycle: parseFloat(document.querySelector('[data-path="speed.burstCycle"]')?.value || 10),
-      burstSlowDuration: parseFloat(document.querySelector('[data-path="speed.burstSlowDuration"]')?.value || 3),
-      burstSlowMultiplier: parseFloat(document.querySelector('[data-path="speed.burstSlowMultiplier"]')?.value || 10),
-    },
+  function updDisp(el){
+    const p=el.dataset.p;if(!p)return;
+    const sc=parseFloat(el.dataset.s)||1;
+    const u=el.dataset.u||'';
+    const v=parseFloat(el.value)*sc;
+    const d=document.getElementById('v-'+p);if(!d)return;
+    if(p.includes('failRate')||p.includes('truncateRate')||p.includes('resetRate'))d.textContent=Math.round(v*100)+'%';
+    else if(p==='speed.bandwidth')d.textContent=v>0?(v/1024).toFixed(0)+' KB/s':'0 KB/s';
+    else if(p==='speed.jitter')d.textContent='±'+v+u;
+    else d.textContent=v+u;
   }
 
-  ws.send(JSON.stringify({ type: 'config', config: cfg }))
+  function sendCfg(){
+    if(!ws||ws.readyState!==WebSocket.OPEN)return;
+    ws.send(JSON.stringify({type:'config',config:{
+      enabled:document.getElementById('cpOn').checked,
+      volatility:{
+        failRate:parseFloat(panel.querySelector('[data-p="volatility.failRate"]')?.value||0)*0.01,
+        truncateRate:parseFloat(panel.querySelector('[data-p="volatility.truncateRate"]')?.value||0)*0.01,
+        resetRate:parseFloat(panel.querySelector('[data-p="volatility.resetRate"]')?.value||0)*0.01,
+        targetExtensions:Array.from(panel.querySelectorAll('input[data-ext]:checked')).map(e=>e.value),
+      },
+      dns:{enabled:document.getElementById('cpDnsOn').checked,mode:document.getElementById('cpDnsMode').value,pattern:document.getElementById('cpDnsPat').value},
+      speed:{
+        bandwidth:parseFloat(panel.querySelector('[data-p="speed.bandwidth"]')?.value||0)*1024,
+        latency:parseFloat(panel.querySelector('[data-p="speed.latency"]')?.value||0),
+        jitter:parseFloat(panel.querySelector('[data-p="speed.jitter"]')?.value||0),
+        burstEnabled:document.getElementById('cpBurst').checked,
+        burstCycle:parseFloat(panel.querySelector('[data-p="speed.burstCycle"]')?.value||10),
+        burstSlowDuration:parseFloat(panel.querySelector('[data-p="speed.burstSlowDuration"]')?.value||3),
+        burstSlowMultiplier:parseFloat(panel.querySelector('[data-p="speed.burstSlowMultiplier"]')?.value||10),
+      },
+    }}));
+  }
+
+  panel.querySelectorAll('input[type="range"]').forEach(el=>{el.addEventListener('input',()=>{updDisp(el);sendCfg()})});
+  ['cpOn','cpDnsOn','cpDnsMode','cpDnsPat','cpBurst'].forEach(id=>{
+    document.getElementById(id).addEventListener('change',sendCfg);
+  });
+  panel.querySelectorAll('input[data-ext]').forEach(el=>el.addEventListener('change',sendCfg));
+  document.getElementById('cpReset').addEventListener('click',()=>{if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'reset-stats'}))});
+
+  const PR={
+    light:{enabled:true,volatility:{failRate:.1,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:200,jitter:100,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
+    medium:{enabled:true,volatility:{failRate:.25,truncateRate:.1,resetRate:.05,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:500,jitter:300,burstEnabled:true,burstCycle:8,burstSlowDuration:2,burstSlowMultiplier:20}},
+    heavy:{enabled:true,volatility:{failRate:.5,truncateRate:.2,resetRate:.1,targetExtensions:['.js','.css']},dns:{enabled:true,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:51200,latency:1000,jitter:500,burstEnabled:true,burstCycle:6,burstSlowDuration:3,burstSlowMultiplier:50}},
+    dns:{enabled:true,volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:true,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:0,jitter:0,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
+    slow:{enabled:true,volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:30720,latency:800,jitter:200,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
+    burst:{enabled:true,volatility:{failRate:.15,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:100,jitter:50,burstEnabled:true,burstCycle:8,burstSlowDuration:2,burstSlowMultiplier:30}},
+    off:{enabled:false,volatility:{failRate:0,truncateRate:0,resetRate:0,targetExtensions:['.js']},dns:{enabled:false,mode:'refuse',pattern:'/assets/.*\\\\\\\\.js$'},speed:{bandwidth:0,latency:0,jitter:0,burstEnabled:false,burstCycle:10,burstSlowDuration:3,burstSlowMultiplier:10}},
+  };
+  panel.querySelectorAll('.cp-pbtn').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const pr=PR[b.dataset.p];if(!pr)return;
+      panel.querySelectorAll('.cp-pbtn').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'config',config:pr}));
+    });
+  });
+
+  cWs();
+  })();`
 }
-
-document.querySelectorAll('input[type="range"]').forEach(el => {
-  el.addEventListener('input', () => {
-    updateRangeDisplay(el)
-    sendConfig()
-  })
-})
-
-document.getElementById('masterEnabled').addEventListener('change', sendConfig)
-document.getElementById('dnsEnabled').addEventListener('change', sendConfig)
-document.getElementById('dnsMode').addEventListener('change', sendConfig)
-document.getElementById('dnsPattern').addEventListener('change', sendConfig)
-document.getElementById('burstEnabled').addEventListener('change', sendConfig)
-document.querySelectorAll('input[data-ext]').forEach(el => el.addEventListener('change', sendConfig))
-document.getElementById('resetStatsBtn').addEventListener('click', () => {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'reset-stats' }))
-})
-
-function toggleSection(id) {
-  document.getElementById(id).classList.toggle('open')
-}
-
-const PRESETS = {
-  light: { enabled: true, volatility: { failRate: 0.1, truncateRate: 0, resetRate: 0, targetExtensions: ['.js'] }, dns: { enabled: false, mode: 'refuse', pattern: '/assets/.*\\\\.js$' }, speed: { bandwidth: 0, latency: 200, jitter: 100, burstEnabled: false, burstCycle: 10, burstSlowDuration: 3, burstSlowMultiplier: 10 } },
-  medium: { enabled: true, volatility: { failRate: 0.25, truncateRate: 0.1, resetRate: 0.05, targetExtensions: ['.js'] }, dns: { enabled: false, mode: 'refuse', pattern: '/assets/.*\\\\.js$' }, speed: { bandwidth: 0, latency: 500, jitter: 300, burstEnabled: true, burstCycle: 8, burstSlowDuration: 2, burstSlowMultiplier: 20 } },
-  heavy: { enabled: true, volatility: { failRate: 0.5, truncateRate: 0.2, resetRate: 0.1, targetExtensions: ['.js', '.css'] }, dns: { enabled: true, mode: 'refuse', pattern: '/assets/.*\\\\.js$' }, speed: { bandwidth: 51200, latency: 1000, jitter: 500, burstEnabled: true, burstCycle: 6, burstSlowDuration: 3, burstSlowMultiplier: 50 } },
-  dns: { enabled: true, volatility: { failRate: 0, truncateRate: 0, resetRate: 0, targetExtensions: ['.js'] }, dns: { enabled: true, mode: 'refuse', pattern: '/assets/.*\\\\.js$' }, speed: { bandwidth: 0, latency: 0, jitter: 0, burstEnabled: false, burstCycle: 10, burstSlowDuration: 3, burstSlowMultiplier: 10 } },
-  slow: { enabled: true, volatility: { failRate: 0, truncateRate: 0, resetRate: 0, targetExtensions: ['.js'] }, dns: { enabled: false, mode: 'refuse', pattern: '/assets/.*\\\\.js$' }, speed: { bandwidth: 30720, latency: 800, jitter: 200, burstEnabled: false, burstCycle: 10, burstSlowDuration: 3, burstSlowMultiplier: 10 } },
-  burst: { enabled: true, volatility: { failRate: 0.15, truncateRate: 0, resetRate: 0, targetExtensions: ['.js'] }, dns: { enabled: false, mode: 'refuse', pattern: '/assets/.*\\\\.js$' }, speed: { bandwidth: 0, latency: 100, jitter: 50, burstEnabled: true, burstCycle: 8, burstSlowDuration: 2, burstSlowMultiplier: 30 } },
-  off: { enabled: false, volatility: { failRate: 0, truncateRate: 0, resetRate: 0, targetExtensions: ['.js'] }, dns: { enabled: false, mode: 'refuse', pattern: '/assets/.*\\\\.js$' }, speed: { bandwidth: 0, latency: 0, jitter: 0, burstEnabled: false, burstCycle: 10, burstSlowDuration: 3, burstSlowMultiplier: 10 } },
-}
-
-document.querySelectorAll('.preset-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const preset = PRESETS[btn.dataset.preset]
-    if (!preset) return
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'))
-    btn.classList.add('active')
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'config', config: preset }))
-    }
-  })
-})
-
-connectWs()
-</script>
-</body>
-</html>`
 
 server.on('upgrade', (req, socket, head) => {
   if (req.url === '/__chaos__/ws') {
@@ -744,10 +647,10 @@ server.listen(proxyPort, () => {
   console.log('  🔥 Network Chaos Proxy Server')
   console.log('')
   console.log(`  Proxy:     http://localhost:${proxyPort} → ${target.href}`)
-  console.log(`  Control:   http://localhost:${proxyPort}/__chaos__`)
+  console.log(`  Panel:     页面右下角 🔥 悬浮按钮`)
   console.log('')
   console.log('  Usage:')
   console.log(`    浏览器打开 http://localhost:${proxyPort} 测试站点`)
-  console.log(`    控制面板打开 http://localhost:${proxyPort}/__chaos__ 调节参数`)
+  console.log(`    点击右下角 🔥 按钮展开/收起控制面板`)
   console.log('')
 })
