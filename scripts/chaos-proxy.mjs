@@ -159,7 +159,7 @@ function isBurstSlowPeriod() {
 const proxy = httpProxy.createProxyServer({
   target: target.href,
   changeOrigin: true,
-  ws: true,
+  ws: false,
   followRedirects: true,
   selfHandleResponse: true,
 })
