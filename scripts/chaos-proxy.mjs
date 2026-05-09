@@ -629,7 +629,6 @@ function CHAOS_INJECT_SCRIPT() {
 @keyframes chaos-breathe-yellow{0%,100%{transform:scale(1)}50%{transform:scale(1.18);filter:brightness(1.3)}}
 @keyframes chaos-breathe-red{0%,100%{transform:scale(1)}50%{transform:scale(1.22);filter:brightness(1.4)}}
 @keyframes chaos-breathe-purple{0%,100%{transform:scale(1)}50%{transform:scale(1.15);filter:brightness(1.2)}}
-#nprogress.chunk-error .bar{background:#f85149 !important;transition:all 2s ease !important;height:3px !important}
 #chaos-panel{position:fixed;bottom:88px;right:24px;width:400px;max-height:calc(100vh - 120px);overflow-y:auto;background:#0d1117;border:1px solid #30363d;border-radius:12px;z-index:999998;box-shadow:0 8px 32px rgba(0,0,0,.6);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#c9d1d9;display:none;scrollbar-width:thin;scrollbar-color:#30363d #0d1117}
 #chaos-panel.open{display:block}
 #chaos-panel *{box-sizing:border-box}
@@ -808,13 +807,9 @@ function CHAOS_INJECT_SCRIPT() {
         fab.classList.add('interfering');
         clearTimeout(fab._interfereTimer);
         fab._interfereTimer=setTimeout(function(){fab.classList.remove('interfering')},3000);
-        var np=document.getElementById('nprogress');
-        if(np)np.classList.add('chunk-error');
         document.getElementById('cpStatusDot').className='cp-status-dot err';
         document.getElementById('cpStatusText').textContent='网络干扰中';
       } else if(s.failed===0&&s.total>0){
-        var np2=document.getElementById('nprogress');
-        if(np2)np2.classList.remove('chunk-error');
         document.getElementById('cpStatusDot').className='cp-status-dot ok';
         document.getElementById('cpStatusText').textContent='网络正常';
       }
@@ -893,8 +888,6 @@ function CHAOS_INJECT_SCRIPT() {
   panel.querySelectorAll('input[data-ext]').forEach(el=>el.addEventListener('change',sendCfg));
   document.getElementById('cpReset').addEventListener('click',()=>{
     if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'reset-stats'}));
-    var np=document.getElementById('nprogress');
-    if(np)np.classList.remove('chunk-error');
   });
 
   panel.querySelectorAll('.cp-sbtn').forEach(b=>{
@@ -911,8 +904,6 @@ function CHAOS_INJECT_SCRIPT() {
       try{localStorage.setItem('__chaos_scenario',sk)}catch(e){}
       if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'config',config:sc}));
       if(sk==='off'){
-        var np=document.getElementById('nprogress');
-        if(np)np.classList.remove('chunk-error');
         document.getElementById('cpStatusDot').className='cp-status-dot ok';
         document.getElementById('cpStatusText').textContent='网络正常';
       }

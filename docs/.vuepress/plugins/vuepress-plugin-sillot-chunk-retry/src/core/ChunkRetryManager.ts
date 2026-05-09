@@ -6,235 +6,70 @@ const DEFAULT_OPTIONS: Required<ChunkRetryOptions> = {
   maxRetries: 3,
   retryDelay: 1000,
   retryKey: 'chunk-retry-attempted',
-  showToast: true,
+  showStatus: true,
 }
 
-type ToastType = 'detect' | 'retrying' | 'success' | 'fail' | 'fallback'
-
-interface ActiveToast {
-  key: string
-  type: ToastType
-  message: string
-  detail: string
-  count: number
-  el: HTMLDivElement
-  dismissTimer: ReturnType<typeof setTimeout> | null
-}
-
-interface PendingToast {
-  type: ToastType
-  message: string
-  detail?: string
-}
-
-class ToastUI {
-  private container: HTMLDivElement | null = null
+class StatusIndicator {
+  private bar: HTMLDivElement | null = null
+  private timer: ReturnType<typeof setTimeout> | null = null
   private enabled: boolean
-  private activeToasts: Map<string, ActiveToast> = new Map()
-  private pendingQueue: PendingToast[] = []
 
   constructor(enabled: boolean) {
     this.enabled = enabled
   }
 
-  init(): void {
-  }
-
   initUI(): void {
     if (!this.enabled || typeof document === 'undefined') return
-    if (this.container) return
-
-    this.container = document.createElement('div')
-    this.container.id = 'chunk-retry-toast-container'
+    if (this.bar) return
+    this.bar = document.createElement('div')
+    this.bar.id = 'chunk-retry-status'
     this.injectStyles()
-    document.body.appendChild(this.container)
-
-    for (const item of this.pendingQueue) {
-      this.show(item.type, item.message, item.detail)
-    }
-    this.pendingQueue = []
+    document.body.appendChild(this.bar)
   }
 
-  show(type: ToastType, message: string, detail?: string): void {
-    if (!this.enabled) return
-
-    if (!this.container) {
-      this.pendingQueue.push({ type, message, detail })
-      return
-    }
-
-    const key = type
-    const existing = this.activeToasts.get(key)
-
-    if (existing) {
-      existing.count++
-      existing.message = message
-      existing.detail = detail || ''
-      this.updateToastDom(existing)
-      this.resetDismissTimer(existing)
-      return
-    }
-
-    const el = document.createElement('div')
-    el.className = `chunk-retry-toast chunk-retry-toast--${type}`
-    el.dataset.key = key
-
-    el.innerHTML = this.buildInnerHtml(type, message, detail, 1)
-
-    el.addEventListener('click', () => this.dismiss(key))
-
-    this.container.appendChild(el)
-
-    const toast: ActiveToast = { key, type, message, detail: detail || '', count: 1, el, dismissTimer: null }
-    this.activeToasts.set(key, toast)
-
-    requestAnimationFrame(() => {
-      el.classList.add('chunk-retry-toast--enter')
-    })
-
-    this.resetDismissTimer(toast)
+  showRecovering(): void {
+    if (!this.bar) { this.initUI() }
+    if (!this.bar) return
+    this.bar.className = 'chunk-retry-status recovering'
+    if (this.timer) { clearTimeout(this.timer); this.timer = null }
   }
 
-  dismiss(key: string): void {
-    const toast = this.activeToasts.get(key)
-    if (!toast) return
-
-    if (toast.dismissTimer) {
-      clearTimeout(toast.dismissTimer)
-      toast.dismissTimer = null
-    }
-
-    toast.el.classList.remove('chunk-retry-toast--enter')
-    toast.el.classList.add('chunk-retry-toast--exit')
-    setTimeout(() => {
-      toast.el.remove()
-      this.activeToasts.delete(key)
-    }, 280)
+  showSuccess(): void {
+    if (!this.bar) return
+    this.bar.className = 'chunk-retry-status success'
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = setTimeout(() => this.hide(), 1500)
   }
 
-  dismissAll(): void {
-    this.pendingQueue = []
-    for (const key of this.activeToasts.keys()) {
-      this.dismiss(key)
-    }
+  showFail(): void {
+    if (!this.bar) return
+    this.bar.className = 'chunk-retry-status fail'
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = setTimeout(() => this.hide(), 3000)
+  }
+
+  hide(): void {
+    if (!this.bar) return
+    this.bar.className = ''
+    if (this.timer) { clearTimeout(this.timer); this.timer = null }
   }
 
   destroy(): void {
-    this.pendingQueue = []
-    for (const toast of this.activeToasts.values()) {
-      if (toast.dismissTimer) clearTimeout(toast.dismissTimer)
-    }
-    this.activeToasts.clear()
-    if (this.container) {
-      this.container.remove()
-      this.container = null
-    }
-    const style = document.getElementById('chunk-retry-toast-styles')
+    if (this.timer) clearTimeout(this.timer)
+    if (this.bar) { this.bar.remove(); this.bar = null }
+    const style = document.getElementById('chunk-retry-status-styles')
     if (style) style.remove()
-  }
-
-  private updateToastDom(toast: ActiveToast): void {
-    const { el, type, message, detail, count } = toast
-    el.innerHTML = this.buildInnerHtml(type, message, detail, count)
-    el.classList.remove('chunk-retry-toast--pulse')
-    void el.offsetWidth
-    el.classList.add('chunk-retry-toast--pulse')
-  }
-
-  private resetDismissTimer(toast: ActiveToast): void {
-    if (toast.dismissTimer) {
-      clearTimeout(toast.dismissTimer)
-    }
-
-    const progressEl = toast.el.querySelector('.chunk-retry-toast__progress') as HTMLDivElement | null
-    if (progressEl) {
-      progressEl.classList.remove('chunk-retry-toast__progress--active')
-      void progressEl.offsetWidth
-      progressEl.classList.add('chunk-retry-toast__progress--active')
-    }
-
-    const duration = this.getDismissDuration(toast.type)
-    if (duration > 0) {
-      if (progressEl) {
-        progressEl.style.animationDuration = `${duration}ms`
-      }
-      toast.dismissTimer = setTimeout(() => this.dismiss(toast.key), duration)
-    }
-  }
-
-  private getDismissDuration(type: ToastType): number {
-    switch (type) {
-      case 'detect': return 4000
-      case 'retrying': return 0
-      case 'success': return 3500
-      case 'fail': return 6000
-      case 'fallback': return 6000
-    }
-  }
-
-  private buildInnerHtml(type: ToastType, message: string, detail: string | undefined, count: number): string {
-    const icon = this.getIcon(type)
-    const badge = count > 1 ? `<span class="chunk-retry-toast__badge">${count}</span>` : ''
-    const detailHtml = detail ? `<div class="chunk-retry-toast__detail">${detail}</div>` : ''
-    const progressHtml = this.getDismissDuration(type) > 0 ? '<div class="chunk-retry-toast__progress"></div>' : ''
-
-    return `
-      <div class="chunk-retry-toast__icon">${icon}</div>
-      <div class="chunk-retry-toast__body">
-        <div class="chunk-retry-toast__msg">${message}${badge}</div>
-        ${detailHtml}
-      </div>
-      <button class="chunk-retry-toast__close" aria-label="关闭">&times;</button>
-      ${progressHtml}
-    `
-  }
-
-  private getIcon(type: ToastType): string {
-    switch (type) {
-      case 'detect': return '⚡'
-      case 'retrying': return '🔄'
-      case 'success': return '✅'
-      case 'fail': return '❌'
-      case 'fallback': return '🔀'
-    }
   }
 
   private injectStyles(): void {
     const style = document.createElement('style')
-    style.id = 'chunk-retry-toast-styles'
+    style.id = 'chunk-retry-status-styles'
     style.textContent = `
-#chunk-retry-toast-container{position:fixed;top:16px;right:16px;z-index:999999;display:flex;flex-direction:column;gap:10px;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:360px}
-.chunk-retry-toast{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:10px;background:rgba(22,27,34,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(48,54,61,.6);color:#c9d1d9;font-size:13px;line-height:1.4;pointer-events:auto;position:relative;overflow:hidden;opacity:0;transform:translateX(30px) scale(.96);transition:opacity .25s ease,transform .25s ease;cursor:default;box-shadow:0 4px 24px rgba(0,0,0,.35)}
-.chunk-retry-toast--enter{opacity:1;transform:translateX(0) scale(1)}
-.chunk-retry-toast--exit{opacity:0;transform:translateX(30px) scale(.96)}
-.chunk-retry-toast--pulse{animation:chunk-retry-pulse .3s ease}
-@keyframes chunk-retry-pulse{0%{transform:scale(1)}50%{transform:scale(1.02)}100%{transform:scale(1)}}
-.chunk-retry-toast__icon{font-size:16px;line-height:1;flex-shrink:0;margin-top:2px}
-.chunk-retry-toast__body{flex:1;min-width:0}
-.chunk-retry-toast__msg{font-weight:600;color:#e6edf3;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.chunk-retry-toast__badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;font-size:10px;font-weight:700;line-height:1;color:#fff;background:rgba(240,136,62,.85)}
-.chunk-retry-toast--detect .chunk-retry-toast__badge{background:rgba(240,136,62,.85)}
-.chunk-retry-toast--retrying .chunk-retry-toast__badge{background:rgba(88,166,255,.85)}
-.chunk-retry-toast--success .chunk-retry-toast__badge{background:rgba(63,185,80,.85)}
-.chunk-retry-toast--fail .chunk-retry-toast__badge{background:rgba(248,81,73,.85)}
-.chunk-retry-toast--fallback .chunk-retry-toast__badge{background:rgba(210,153,34,.85)}
-.chunk-retry-toast__detail{margin-top:3px;font-size:11px;color:#8b949e;word-break:break-all;opacity:.85}
-.chunk-retry-toast__close{position:absolute;top:4px;right:6px;background:none;border:none;color:#484f58;font-size:16px;line-height:1;cursor:pointer;padding:2px 4px;border-radius:4px;transition:color .15s,background .15s}
-.chunk-retry-toast__close:hover{color:#c9d1d9;background:rgba(255,255,255,.08)}
-.chunk-retry-toast__progress{position:absolute;bottom:0;left:0;height:2px;background:rgba(240,136,62,.6);width:0;border-radius:0 0 10px 10px}
-.chunk-retry-toast__progress--active{animation:chunk-retry-progress linear forwards}
-@keyframes chunk-retry-progress{from{width:100%}to{width:0%}}
-.chunk-retry-toast--detect{border-left:3px solid #f0883e}
-.chunk-retry-toast--retrying{border-left:3px solid #58a6ff}
-.chunk-retry-toast--success{border-left:3px solid #3fb950;background:rgba(13,31,13,.92);border-color:rgba(27,67,50,.6)}
-.chunk-retry-toast--fail{border-left:3px solid #f85149;background:rgba(31,13,13,.92);border-color:rgba(77,27,27,.6)}
-.chunk-retry-toast--fallback{border-left:3px solid #d29922;background:rgba(31,26,13,.92);border-color:rgba(77,61,27,.6)}
-.chunk-retry-toast--success .chunk-retry-toast__msg{color:#3fb950}
-.chunk-retry-toast--fail .chunk-retry-toast__msg{color:#f85149}
-.chunk-retry-toast--fallback .chunk-retry-toast__msg{color:#d29922}
-.chunk-retry-toast--retrying .chunk-retry-toast__icon{animation:chunk-retry-spin 1.2s linear infinite}
-@keyframes chunk-retry-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-#nprogress.chunk-error .bar{background:#f85149 !important;transition:all 2s ease !important;height:3px !important}
+#chunk-retry-status{position:fixed;top:0;left:0;height:2px;z-index:9999999;pointer-events:none;transition:opacity .5s ease}
+#chunk-retry-status.recovering{background:#58a6ff;animation:chunk-retry-progress 3s ease-in-out infinite}
+#chunk-retry-status.success{background:#3fb950;width:100%;animation:none}
+#chunk-retry-status.fail{background:#f85149;width:100%;animation:none}
+@keyframes chunk-retry-progress{0%{width:0}50%{width:70%}100%{width:95%}}
 `
     document.head.appendChild(style)
   }
@@ -254,7 +89,7 @@ export class ChunkRetryManager {
   private recoveredModules: Map<string, any> = new Map()
   private pathModules: Map<string, any> = new Map()
   private recoveryGeneration = 0
-  private toast: ToastUI
+  private status: StatusIndicator
   private preloadErrorHandler: ((ev: Event) => void) | null = null
   private pendingTarget: RouteLocationNormalized | null = null
   private unhandledRejectionHandler: ((ev: PromiseRejectionEvent) => void) | null = null
@@ -267,7 +102,7 @@ export class ChunkRetryManager {
   constructor(router: RouterLike, options: ChunkRetryOptions = {}) {
     this.router = router
     this.options = { ...DEFAULT_OPTIONS, ...options }
-    this.toast = new ToastUI(this.options.showToast)
+    this.status = new StatusIndicator(this.options.showStatus)
   }
 
   setRoutes(routes: Record<string, any>): void {
@@ -305,7 +140,7 @@ export class ChunkRetryManager {
       this.retryCount = 0
       this.pathModules.clear()
       sessionStorage.removeItem(this.options.retryKey)
-      this.toast.dismissAll()
+      this.status.hide()
 
       if (this.lastRecoveredPath !== null) {
         const currentPath = this.router.currentRoute.value?.path
@@ -355,7 +190,7 @@ export class ChunkRetryManager {
   }
 
   initUI(): void {
-    this.toast.initUI()
+    this.status.initUI()
   }
 
   destroy(): void {
@@ -367,14 +202,13 @@ export class ChunkRetryManager {
       window.removeEventListener('unhandledrejection', this.unhandledRejectionHandler)
       this.unhandledRejectionHandler = null
     }
-    this.toast.destroy()
+    this.status.destroy()
   }
 
   private handleChunkFailure(error: Error, to: RouteLocationNormalized): void {
     const failedUrl = extractFailedUrl(error)
-    const shortUrl = this.shortenUrl(failedUrl)
 
-    this.signalNProgressError()
+    this.status.showRecovering()
 
     if (this.isRecovering) {
       if (this.pendingRecovery) {
@@ -383,20 +217,10 @@ export class ChunkRetryManager {
       return
     }
 
-    this.toast.show('detect', '资源加载失败', shortUrl)
-
     if (failedUrl && this.recoveredModules.has(failedUrl)) {
       this.pathModules.set(to.path, this.recoveredModules.get(failedUrl))
       this.lastRecoveredPath = to.path
-      this.isApplyingModule = true
-      this.router.replace(to.fullPath).then(() => {
-        this.isApplyingModule = false
-        this.restoreNProgress()
-        this.toast.show('success', '页面恢复成功', to.fullPath)
-      }).catch(() => {
-        this.isApplyingModule = false
-        this.fallbackNavigation(to)
-      })
+      this.navigateWithFallback(to)
       return
     }
 
@@ -416,8 +240,6 @@ export class ChunkRetryManager {
 
   private async recoverWithCacheBusting(failedUrl: string, to: RouteLocationNormalized, generation: number): Promise<void> {
     try {
-      this.toast.show('retrying', `正在恢复 (${this.retryCount + 1}/${this.options.maxRetries})`, this.shortenUrl(failedUrl))
-
       const module = await this.retryImportWithCacheBusting(failedUrl)
       this.recoveredModules.set(failedUrl, module)
       this.pathModules.set(to.path, module)
@@ -428,29 +250,19 @@ export class ChunkRetryManager {
       this.isRecovering = false
       sessionStorage.removeItem(this.options.retryKey)
 
-      this.isApplyingModule = true
-      try {
-        await this.router.replace(to.fullPath)
-        this.isApplyingModule = false
-        this.restoreNProgress()
-        this.toast.show('success', '页面恢复成功', to.fullPath)
-      } catch {
-        this.isApplyingModule = false
-        this.fallbackNavigation(to)
-      }
+      this.navigateWithFallback(to)
     } catch {
       if (this.recoveryGeneration !== generation) return
 
       this.retryCount++
       if (this.retryCount < this.options.maxRetries) {
         const delay = this.options.retryDelay * this.retryCount
-        this.toast.show('retrying', `恢复失败，${delay}ms 后重试 (${this.retryCount}/${this.options.maxRetries})`, this.shortenUrl(failedUrl))
         await new Promise(resolve => setTimeout(resolve, delay))
         this.isRecovering = false
         sessionStorage.removeItem(this.options.retryKey)
         await this.recoverWithCacheBusting(failedUrl, to, generation)
       } else {
-        this.toast.show('fail', `恢复失败 (已重试 ${this.options.maxRetries} 次)`, this.shortenUrl(failedUrl))
+        this.status.showFail()
         this.fallbackNavigation(to)
       }
     }
@@ -470,18 +282,15 @@ export class ChunkRetryManager {
   }
 
   private async recoverSecondaryChunk(failedUrl: string): Promise<void> {
-    const shortUrl = this.shortenUrl(failedUrl)
-    this.toast.show('detect', '页面组件加载失败', shortUrl)
+    this.status.showRecovering()
 
     try {
-      this.toast.show('retrying', '正在恢复页面组件...', shortUrl)
       const module = await this.retryImportWithCacheBusting(failedUrl)
       this.recoveredModules.set(failedUrl, module)
-      this.restoreNProgress()
-      this.toast.show('success', '页面组件恢复成功', shortUrl)
+      this.status.showSuccess()
       this.tryReloadCurrentPage(failedUrl)
     } catch {
-      this.toast.show('fail', '页面组件恢复失败', shortUrl)
+      this.status.showFail()
       const currentPath = this.router.currentRoute.value?.fullPath
       if (currentPath) {
         this.fallbackNavigation(this.router.currentRoute.value as RouteLocationNormalized)
@@ -515,6 +324,31 @@ export class ChunkRetryManager {
     }, 300)
   }
 
+  private async navigateWithFallback(to: RouteLocationNormalized): Promise<void> {
+    this.isApplyingModule = true
+    try {
+      await this.router.replace(to.fullPath)
+      this.isApplyingModule = false
+
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      const currentPath = this.router.currentRoute.value?.path
+      if (currentPath !== to.path) {
+        this.isRecovering = false
+        sessionStorage.removeItem(this.options.retryKey)
+        location.href = to.fullPath
+        return
+      }
+
+      this.status.showSuccess()
+    } catch {
+      this.isApplyingModule = false
+      this.status.showFail()
+      this.isRecovering = false
+      sessionStorage.removeItem(this.options.retryKey)
+      location.href = to.fullPath
+    }
+  }
+
   private patchRouteLoader(path: string, module: any): { routeKey: string; originalLoader: () => Promise<any> } | null {
     if (!this.routes) return null
     const routesObj = this.routes.value || this.routes
@@ -543,10 +377,28 @@ export class ChunkRetryManager {
 
     if (!routeKey) {
       for (const [key, route] of Object.entries(routesObj)) {
-        if (typeof route.loader === 'function' && (key === path || path.startsWith(key) || key.startsWith(path))) {
-          routeKey = key
-          break
+        if (typeof route?.loader === 'function') {
+          if (key === path || path.startsWith(key) || key.startsWith(path)) {
+            routeKey = key
+            break
+          }
         }
+      }
+    }
+
+    if (!routeKey) {
+      let bestMatch: string | null = null
+      let bestScore = -1
+      for (const [key, route] of Object.entries(routesObj)) {
+        if (typeof route?.loader !== 'function') continue
+        const score = this.pathSimilarity(path, key)
+        if (score > bestScore) {
+          bestScore = score
+          bestMatch = key
+        }
+      }
+      if (bestMatch && bestScore > 0) {
+        routeKey = bestMatch
       }
     }
 
@@ -558,6 +410,18 @@ export class ChunkRetryManager {
     return { routeKey, originalLoader }
   }
 
+  private pathSimilarity(a: string, b: string): number {
+    const sa = a.replace(/\/$/, '').split('/')
+    const sb = b.replace(/\/$/, '').split('/')
+    let common = 0
+    const minLen = Math.min(sa.length, sb.length)
+    for (let i = 0; i < minLen; i++) {
+      if (sa[i] === sb[i]) common++
+      else break
+    }
+    return common / Math.max(sa.length, sb.length)
+  }
+
   private restoreRouteLoader(routeKey: string, originalLoader: () => Promise<any>): void {
     if (!this.routes) return
     const routesObj = this.routes.value || this.routes
@@ -567,23 +431,10 @@ export class ChunkRetryManager {
     }
   }
 
-  private signalNProgressError(): void {
-    document.documentElement.style.setProperty('--nprogress-c', '#f85149')
-    const nprogress = document.getElementById('nprogress')
-    if (nprogress) nprogress.classList.add('chunk-error')
-  }
-
-  private restoreNProgress(): void {
-    document.documentElement.style.removeProperty('--nprogress-c')
-    const nprogress = document.getElementById('nprogress')
-    if (nprogress) nprogress.classList.remove('chunk-error')
-  }
-
   private fallbackNavigation(to: RouteLocationNormalized): void {
-    this.toast.show('fallback', '回退到整页导航', to.fullPath)
+    this.status.showFail()
     this.isRecovering = false
     this.isApplyingModule = false
-    this.restoreNProgress()
     sessionStorage.removeItem(this.options.retryKey)
     const target = to.fullPath
     if (location.pathname + location.search !== target) {

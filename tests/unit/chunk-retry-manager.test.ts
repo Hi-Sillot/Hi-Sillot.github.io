@@ -42,7 +42,7 @@ describe('ChunkRetryManager', () => {
 
   beforeEach(() => {
     router = createMockRouter()
-    manager = new ChunkRetryManager(router as any, { maxRetries: 3, retryDelay: 100, retryKey: 'test-retry', showToast: false })
+    manager = new ChunkRetryManager(router as any, { maxRetries: 3, retryDelay: 100, retryKey: 'test-retry', showStatus: false })
     sessionStorage.clear()
   })
 
@@ -322,7 +322,7 @@ describe('ChunkRetryManager', () => {
   })
 
   describe('beforeEach route loader patching', () => {
-    it('patches route loader in beforeEach when pathModules has entry', () => {
+    it('patches route loader in beforeEach when pathModules has entry', async () => {
       manager.init()
       const mockModule = { default: { name: 'TestComponent' } }
       ;(manager as any).pathModules.set('/test/', mockModule)
@@ -334,12 +334,12 @@ describe('ChunkRetryManager', () => {
       const to = createMockLocation('/test/')
       router._guards.beforeEach[0](to, createMockLocation('/'))
 
-      expect(mockRoutes['/test/'].loader()).resolves.toBe(mockModule)
+      await expect(mockRoutes['/test/'].loader()).resolves.toBe(mockModule)
       expect((manager as any).pendingLoaderRestore).toBeTruthy()
       expect((manager as any).pendingLoaderRestore.routeKey).toBe('/test/')
     })
 
-    it('uses resolveRoutePathFn to find route key', () => {
+    it('uses resolveRoutePathFn to find route key', async () => {
       manager.init()
       const mockModule = { default: { name: 'TestComponent' } }
       ;(manager as any).pathModules.set('/test/', mockModule)
@@ -352,11 +352,11 @@ describe('ChunkRetryManager', () => {
       const to = createMockLocation('/test/')
       router._guards.beforeEach[0](to, createMockLocation('/'))
 
-      expect(mockRoutes['/resolved-test/'].loader()).resolves.toBe(mockModule)
+      await expect(mockRoutes['/resolved-test/'].loader()).resolves.toBe(mockModule)
       expect((manager as any).pendingLoaderRestore.routeKey).toBe('/resolved-test/')
     })
 
-    it('falls back to candidate matching when resolveRoutePathFn fails', () => {
+    it('falls back to candidate matching when resolveRoutePathFn fails', async () => {
       manager.init()
       const mockModule = { default: { name: 'TestComponent' } }
       ;(manager as any).pathModules.set('/test/', mockModule)
@@ -369,7 +369,7 @@ describe('ChunkRetryManager', () => {
       const to = createMockLocation('/test/')
       router._guards.beforeEach[0](to, createMockLocation('/'))
 
-      expect(mockRoutes['/test/'].loader()).resolves.toBe(mockModule)
+      await expect(mockRoutes['/test/'].loader()).resolves.toBe(mockModule)
       expect((manager as any).pendingLoaderRestore).toBeTruthy()
     })
 
@@ -459,6 +459,7 @@ describe('ChunkRetryManager', () => {
       expect((defaultManager as any).options.maxRetries).toBe(3)
       expect((defaultManager as any).options.retryDelay).toBe(1000)
       expect((defaultManager as any).options.retryKey).toBe('chunk-retry-attempted')
+      expect((defaultManager as any).options.showStatus).toBe(true)
     })
   })
 
@@ -520,67 +521,6 @@ describe('ChunkRetryManager', () => {
     })
   })
 
-  describe('NProgress integration', () => {
-    it('signalNProgressError sets CSS variable and adds chunk-error class', () => {
-      manager.init()
-
-      const nprogress = document.createElement('div')
-      nprogress.id = 'nprogress'
-      document.body.appendChild(nprogress)
-
-      ;(manager as any).signalNProgressError()
-
-      expect(document.documentElement.style.getPropertyValue('--nprogress-c')).toBe('#f85149')
-      expect(nprogress.classList.contains('chunk-error')).toBe(true)
-    })
-
-    it('restoreNProgress removes CSS variable and chunk-error class', () => {
-      manager.init()
-
-      const nprogress = document.createElement('div')
-      nprogress.id = 'nprogress'
-      document.body.appendChild(nprogress)
-
-      ;(manager as any).signalNProgressError()
-      ;(manager as any).restoreNProgress()
-
-      expect(document.documentElement.style.getPropertyValue('--nprogress-c')).toBe('')
-      expect(nprogress.classList.contains('chunk-error')).toBe(false)
-    })
-
-    it('signalNProgressError is called when chunk failure is detected', () => {
-      manager.init()
-      const signalSpy = vi.spyOn(manager as any, 'signalNProgressError')
-
-      const onErrorFn = router._guards.onError[0]
-      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
-
-      expect(signalSpy).toHaveBeenCalled()
-      signalSpy.mockRestore()
-    })
-
-    it('restoreNProgress is called on fallback navigation', () => {
-      manager.init()
-      const restoreSpy = vi.spyOn(manager as any, 'restoreNProgress')
-
-      const onErrorFn = router._guards.onError[0]
-      onErrorFn(new Error('Importing a module script failed.'), createMockLocation('/test/'), createMockLocation('/'))
-
-      expect(restoreSpy).toHaveBeenCalled()
-      restoreSpy.mockRestore()
-    })
-
-    it('signalNProgressError handles missing nprogress element gracefully', () => {
-      manager.init()
-      expect(() => (manager as any).signalNProgressError()).not.toThrow()
-    })
-
-    it('restoreNProgress handles missing nprogress element gracefully', () => {
-      manager.init()
-      expect(() => (manager as any).restoreNProgress()).not.toThrow()
-    })
-  })
-
   describe('destroy', () => {
     it('removes vite:preloadError listener', () => {
       manager.init()
@@ -599,156 +539,241 @@ describe('ChunkRetryManager', () => {
     })
   })
 
-  describe('ToastUI aggregation', () => {
-    let toastRouter: ReturnType<typeof createMockRouter>
-    let toastManager: ChunkRetryManager
+  describe('StatusIndicator', () => {
+    let statusRouter: ReturnType<typeof createMockRouter>
+    let statusManager: ChunkRetryManager
 
     beforeEach(() => {
-      toastRouter = createMockRouter()
-      toastManager = new ChunkRetryManager(toastRouter as any, { maxRetries: 3, retryDelay: 100, retryKey: 'toast-test', showToast: true })
+      statusRouter = createMockRouter()
+      statusManager = new ChunkRetryManager(statusRouter as any, { maxRetries: 3, retryDelay: 100, retryKey: 'status-test', showStatus: true })
       sessionStorage.clear()
       document.body.innerHTML = ''
       document.head.innerHTML = ''
     })
 
     afterEach(() => {
-      toastManager.destroy()
+      statusManager.destroy()
       document.body.innerHTML = ''
       document.head.innerHTML = ''
     })
 
-    it('creates toast container on initUI', () => {
-      toastManager.init()
-      toastManager.initUI()
-      expect(document.querySelector('#chunk-retry-toast-container')).not.toBeNull()
+    it('creates status bar element on initUI', () => {
+      statusManager.init()
+      statusManager.initUI()
+      expect(document.querySelector('#chunk-retry-status')).not.toBeNull()
     })
 
-    it('creates toast styles on initUI', () => {
-      toastManager.init()
-      toastManager.initUI()
-      expect(document.querySelector('#chunk-retry-toast-styles')).not.toBeNull()
+    it('creates status styles on initUI', () => {
+      statusManager.init()
+      statusManager.initUI()
+      expect(document.querySelector('#chunk-retry-status-styles')).not.toBeNull()
     })
 
-    it('does not create toast container on init alone', () => {
-      toastManager.init()
-      expect(document.querySelector('#chunk-retry-toast-container')).toBeNull()
+    it('does not create status bar on init alone', () => {
+      statusManager.init()
+      expect(document.querySelector('#chunk-retry-status')).toBeNull()
     })
 
-    it('queues toasts before initUI and flushes after', () => {
-      toastManager.init()
-
-      ;(toastManager as any).toast.show('detect', '排队消息', 'url1')
-      expect(document.querySelectorAll('.chunk-retry-toast').length).toBe(0)
-
-      toastManager.initUI()
-
-      const toasts = document.querySelectorAll('.chunk-retry-toast--detect')
-      expect(toasts.length).toBe(1)
-      expect(toasts[0].textContent).toContain('排队消息')
+    it('does not create UI when showStatus is false', () => {
+      const noStatusManager = new ChunkRetryManager(statusRouter as any, { showStatus: false })
+      noStatusManager.init()
+      noStatusManager.initUI()
+      expect(document.querySelector('#chunk-retry-status')).toBeNull()
+      noStatusManager.destroy()
     })
 
-    it('aggregates same-type toasts with count badge', () => {
-      toastManager.init()
-      toastManager.initUI()
-
-      ;(toastManager as any).toast.show('detect', '第一次', 'url1')
-      ;(toastManager as any).toast.show('detect', '第二次', 'url2')
-
-      const toasts = document.querySelectorAll('.chunk-retry-toast--detect')
-      expect(toasts.length).toBe(1)
-
-      const badge = toasts[0].querySelector('.chunk-retry-toast__badge')
-      expect(badge).not.toBeNull()
-      expect(badge?.textContent).toBe('2')
+    it('showRecovering sets recovering className', () => {
+      statusManager.init()
+      statusManager.initUI()
+      const status = (statusManager as any).status
+      status.showRecovering()
+      const bar = document.querySelector('#chunk-retry-status') as HTMLDivElement
+      expect(bar.className).toBe('chunk-retry-status recovering')
     })
 
-    it('does not show badge when count is 1', () => {
-      toastManager.init()
-      toastManager.initUI()
-
-      ;(toastManager as any).toast.show('detect', '检测', 'url1')
-
-      const toasts = document.querySelectorAll('.chunk-retry-toast--detect')
-      expect(toasts.length).toBe(1)
-
-      const badge = toasts[0].querySelector('.chunk-retry-toast__badge')
-      expect(badge).toBeNull()
+    it('showSuccess sets success className', () => {
+      statusManager.init()
+      statusManager.initUI()
+      const status = (statusManager as any).status
+      status.showSuccess()
+      const bar = document.querySelector('#chunk-retry-status') as HTMLDivElement
+      expect(bar.className).toBe('chunk-retry-status success')
     })
 
-    it('keeps different types as separate toasts', () => {
-      toastManager.init()
-      toastManager.initUI()
-
-      ;(toastManager as any).toast.show('detect', '检测', 'url1')
-      ;(toastManager as any).toast.show('retrying', '恢复中', 'url1')
-
-      const allToasts = document.querySelectorAll('.chunk-retry-toast')
-      expect(allToasts.length).toBe(2)
+    it('showFail sets fail className', () => {
+      statusManager.init()
+      statusManager.initUI()
+      const status = (statusManager as any).status
+      status.showFail()
+      const bar = document.querySelector('#chunk-retry-status') as HTMLDivElement
+      expect(bar.className).toBe('chunk-retry-status fail')
     })
 
-    it('updates message on aggregated toast', () => {
-      toastManager.init()
-      toastManager.initUI()
-
-      ;(toastManager as any).toast.show('detect', '第一次', 'url1')
-      ;(toastManager as any).toast.show('detect', '第二次', 'url2')
-
-      const toasts = document.querySelectorAll('.chunk-retry-toast--detect')
-      expect(toasts.length).toBe(1)
-      expect(toasts[0].textContent).toContain('第二次')
+    it('hide clears className', () => {
+      statusManager.init()
+      statusManager.initUI()
+      const status = (statusManager as any).status
+      status.showRecovering()
+      status.hide()
+      const bar = document.querySelector('#chunk-retry-status') as HTMLDivElement
+      expect(bar.className).toBe('')
     })
 
-    it('adds pulse animation on update', () => {
-      toastManager.init()
-      toastManager.initUI()
+    it('showSuccess auto-hides after 1.5s', async () => {
+      vi.useFakeTimers()
+      statusManager.init()
+      statusManager.initUI()
+      const status = (statusManager as any).status
+      status.showSuccess()
+      const bar = document.querySelector('#chunk-retry-status') as HTMLDivElement
+      expect(bar.className).toBe('chunk-retry-status success')
 
-      ;(toastManager as any).toast.show('detect', '第一次', 'url1')
-      ;(toastManager as any).toast.show('detect', '第二次', 'url2')
-
-      const toast = document.querySelector('.chunk-retry-toast--detect')
-      expect(toast?.classList.contains('chunk-retry-toast--pulse')).toBe(true)
+      vi.advanceTimersByTime(1500)
+      expect(bar.className).toBe('')
+      vi.useRealTimers()
     })
 
-    it('dismissAll clears all toasts', async () => {
-      toastManager.init()
-      toastManager.initUI()
+    it('showFail auto-hides after 3s', async () => {
+      vi.useFakeTimers()
+      statusManager.init()
+      statusManager.initUI()
+      const status = (statusManager as any).status
+      status.showFail()
+      const bar = document.querySelector('#chunk-retry-status') as HTMLDivElement
+      expect(bar.className).toBe('chunk-retry-status fail')
 
-      ;(toastManager as any).toast.show('detect', '检测', 'url1')
-      ;(toastManager as any).toast.show('retrying', '恢复中', 'url1')
-
-      const beforeCount = document.querySelectorAll('.chunk-retry-toast').length
-      expect(beforeCount).toBe(2)
-
-      ;(toastManager as any).toast.dismissAll()
-
-      await new Promise(resolve => setTimeout(resolve, 350))
-
-      const activeToasts = (toastManager as any).toast.activeToasts
-      expect(activeToasts.size).toBe(0)
+      vi.advanceTimersByTime(3000)
+      expect(bar.className).toBe('')
+      vi.useRealTimers()
     })
 
-    it('dismissAll is called in afterEach', async () => {
-      toastManager.init()
-      toastManager.initUI()
+    it('destroy removes bar element and styles', () => {
+      statusManager.init()
+      statusManager.initUI()
+      expect(document.querySelector('#chunk-retry-status')).not.toBeNull()
+      expect(document.querySelector('#chunk-retry-status-styles')).not.toBeNull()
 
-      ;(toastManager as any).toast.show('detect', '检测', 'url1')
-
-      toastRouter._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
-
-      await new Promise(resolve => setTimeout(resolve, 350))
-
-      const activeToasts = (toastManager as any).toast.activeToasts
-      expect(activeToasts.size).toBe(0)
+      statusManager.destroy()
+      expect(document.querySelector('#chunk-retry-status')).toBeNull()
+      expect(document.querySelector('#chunk-retry-status-styles')).toBeNull()
     })
 
-    it('has close button', () => {
-      toastManager.init()
-      toastManager.initUI()
+    it('status.hide is called in afterEach when not recovering', () => {
+      statusManager.init()
+      statusManager.initUI()
+      const status = (statusManager as any).status
+      const hideSpy = vi.spyOn(status, 'hide')
 
-      ;(toastManager as any).toast.show('detect', '检测', 'url1')
+      statusRouter._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
 
-      const closeBtn = document.querySelector('.chunk-retry-toast__close')
-      expect(closeBtn).not.toBeNull()
+      expect(hideSpy).toHaveBeenCalled()
+      hideSpy.mockRestore()
+    })
+  })
+
+  describe('navigateWithFallback', () => {
+    it('calls router.replace and shows success when path matches', async () => {
+      vi.useFakeTimers()
+      manager.init()
+      const to = createMockLocation('/test/')
+      router._setCurrentRoute(to)
+
+      const promise = (manager as any).navigateWithFallback(to)
+
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(1000)
+      await promise
+
+      expect(router.replace).toHaveBeenCalledWith('/test/')
+      expect((manager as any).isApplyingModule).toBe(false)
+      vi.useRealTimers()
+    })
+
+    it('falls back to location.href when path does not match after 1s', async () => {
+      vi.useFakeTimers()
+      manager.init()
+      const to = createMockLocation('/target/')
+      router._setCurrentRoute(createMockLocation('/current/'))
+
+      const promise = (manager as any).navigateWithFallback(to)
+
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(1000)
+      await promise
+
+      expect(router.replace).toHaveBeenCalledWith('/target/')
+      vi.useRealTimers()
+    })
+
+    it('falls back to location.href when router.replace throws', async () => {
+      manager.init()
+      const to = createMockLocation('/test/')
+      router._setCurrentRoute(to)
+
+      const replaceError = new Error('Navigation failed')
+      router.replace = vi.fn(() => Promise.reject(replaceError))
+
+      const statusSpy = vi.spyOn((manager as any).status, 'showFail')
+
+      await (manager as any).navigateWithFallback(to)
+
+      expect(statusSpy).toHaveBeenCalled()
+      expect((manager as any).isRecovering).toBe(false)
+      expect((manager as any).isApplyingModule).toBe(false)
+      statusSpy.mockRestore()
+    })
+
+    it('sets isApplyingModule during navigation', async () => {
+      vi.useFakeTimers()
+      manager.init()
+      const to = createMockLocation('/test/')
+      router._setCurrentRoute(to)
+
+      let applyingDuringNav = false
+      router.replace = vi.fn(async () => {
+        applyingDuringNav = (manager as any).isApplyingModule
+      })
+
+      const promise = (manager as any).navigateWithFallback(to)
+
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(1000)
+      await promise
+
+      expect(applyingDuringNav).toBe(true)
+      vi.useRealTimers()
+    })
+  })
+
+  describe('pathSimilarity', () => {
+    it('returns 1 for identical paths', () => {
+      manager.init()
+      expect((manager as any).pathSimilarity('/test/', '/test/')).toBe(1)
+    })
+
+    it('returns 0 for paths with no common segments', () => {
+      manager.init()
+      expect((manager as any).pathSimilarity('aaa', 'bbb')).toBe(0)
+    })
+
+    it('returns low score for different paths sharing only root', () => {
+      manager.init()
+      const score = (manager as any).pathSimilarity('/aaa/', '/bbb/')
+      expect(score).toBeLessThan(1)
+      expect(score).toBeGreaterThan(0)
+    })
+
+    it('returns partial score for partially matching paths', () => {
+      manager.init()
+      const score = (manager as any).pathSimilarity('/blog/post/', '/blog/other/')
+      expect(score).toBeGreaterThan(0)
+      expect(score).toBeLessThan(1)
+    })
+
+    it('handles trailing slashes', () => {
+      manager.init()
+      const score = (manager as any).pathSimilarity('/test', '/test/')
+      expect(score).toBeGreaterThan(0)
     })
   })
 })
