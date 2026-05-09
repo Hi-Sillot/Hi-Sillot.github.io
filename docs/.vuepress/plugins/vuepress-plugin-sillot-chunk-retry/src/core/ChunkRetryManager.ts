@@ -245,13 +245,12 @@ export class ChunkRetryManager {
   private pendingRecovery: Promise<void> | null = null
   private retryCount = 0
   private isRecovering = false
-  private recoveredUrls: Set<string> = new Set()
   private recoveredModules: Map<string, any> = new Map()
   private recoveryGeneration = 0
   private toast: ToastUI
-  private lastNavigationTime = 0
   private preloadErrorHandler: ((ev: Event) => void) | null = null
   private pendingTarget: RouteLocationNormalized | null = null
+  private unhandledRejectionHandler: ((ev: PromiseRejectionEvent) => void) | null = null
 
   constructor(router: RouterLike, options: ChunkRetryOptions = {}) {
     this.router = router
@@ -264,20 +263,19 @@ export class ChunkRetryManager {
 
     this.router.beforeEach((to: RouteLocationNormalized) => {
       this.pendingTarget = to
-      this.recoveredUrls.clear()
-      this.recoveredModules.clear()
     })
 
     this.router.afterEach(() => {
-      this.lastNavigationTime = Date.now()
       this.retryCount = 0
+      this.recoveredModules.clear()
       sessionStorage.removeItem(this.options.retryKey)
       this.toast.dismissAll()
     })
 
     this.router.onError((error: Error, to: RouteLocationNormalized) => {
       if (!isDynamicImportError(error)) return
-      this.handleChunkFailure(error, to)
+      const target = this.pendingTarget || to
+      this.handleChunkFailure(error, target)
     })
 
     this.preloadErrorHandler = ((event: Event & { payload?: Error }) => {
@@ -287,15 +285,29 @@ export class ChunkRetryManager {
 
       const failedUrl = extractFailedUrl(error)
       if (!failedUrl) return
-      if (this.recoveredUrls.has(failedUrl) && this.recoveredModules.has(failedUrl)) return
 
       event.preventDefault()
+
+      if (this.recoveredModules.has(failedUrl)) {
+        this.applyRecoveredModule(failedUrl)
+        return
+      }
+
+      if (this.isRecovering) return
 
       const target = this.pendingTarget || (this.router.currentRoute.value as RouteLocationNormalized)
       this.handleChunkFailure(error, target)
     }) as (ev: Event) => void
 
     window.addEventListener('vite:preloadError', this.preloadErrorHandler)
+
+    this.unhandledRejectionHandler = ((event: PromiseRejectionEvent) => {
+      if (isDynamicImportError(event.reason)) {
+        event.preventDefault()
+      }
+    }) as (ev: PromiseRejectionEvent) => void
+
+    window.addEventListener('unhandledrejection', this.unhandledRejectionHandler)
   }
 
   initUI(): void {
@@ -306,6 +318,10 @@ export class ChunkRetryManager {
     if (this.preloadErrorHandler) {
       window.removeEventListener('vite:preloadError', this.preloadErrorHandler)
       this.preloadErrorHandler = null
+    }
+    if (this.unhandledRejectionHandler) {
+      window.removeEventListener('unhandledrejection', this.unhandledRejectionHandler)
+      this.unhandledRejectionHandler = null
     }
     this.toast.destroy()
   }
@@ -323,11 +339,8 @@ export class ChunkRetryManager {
 
     this.toast.show('detect', '资源加载失败', shortUrl)
 
-    if (failedUrl && this.recoveredUrls.has(failedUrl)) {
-      this.toast.show('retrying', '使用已恢复模块重试', shortUrl)
-      this.router.push(to.fullPath).catch(() => {
-        this.fallbackNavigation(to)
-      })
+    if (failedUrl && this.recoveredModules.has(failedUrl)) {
+      this.applyRecoveredModule(failedUrl)
       return
     }
 
@@ -350,12 +363,14 @@ export class ChunkRetryManager {
       this.toast.show('retrying', `正在恢复 (${this.retryCount + 1}/${this.options.maxRetries})`, this.shortenUrl(failedUrl))
 
       const module = await this.retryImportWithCacheBusting(failedUrl)
-      this.recoveredUrls.add(failedUrl)
       this.recoveredModules.set(failedUrl, module)
 
       if (this.recoveryGeneration !== generation) return
 
-      await this.updateRouteAndRetry(to, module)
+      this.updatePageChunk(to, module)
+
+      this.isRecovering = false
+      sessionStorage.removeItem(this.options.retryKey)
 
       this.toast.show('success', '页面恢复成功', to.fullPath)
     } catch {
@@ -382,46 +397,31 @@ export class ChunkRetryManager {
     return import(/* @vite-ignore */ retryUrl)
   }
 
-  private async updateRouteAndRetry(to: RouteLocationNormalized, module: any): Promise<void> {
-    const targetName = to.name
-
-    if (!targetName) {
-      this.fallbackNavigation(to)
-      return
+  private updatePageChunk(to: RouteLocationNormalized, module: any): void {
+    const current = this.router.currentRoute.value as RouteLocationNormalized
+    if (current.meta && current.path === to.path) {
+      current.meta._pageChunk = module
+    } else {
+      this.router.replace(to.fullPath).catch(() => {
+        this.fallbackNavigation(to)
+      })
     }
+  }
 
-    const routes = this.router.getRoutes()
-    const matchedRoute = routes.find(r => r.name === targetName)
+  private applyRecoveredModule(failedUrl: string): void {
+    const module = this.recoveredModules.get(failedUrl)
+    if (!module) return
 
-    if (!matchedRoute) {
-      this.fallbackNavigation(to)
-      return
-    }
-
-    const cachedModule = module
-    const routeConfig = {
-      path: matchedRoute.path,
-      name: matchedRoute.name,
-      component: () => Promise.resolve(cachedModule),
-      meta: matchedRoute.meta || {},
-      props: matchedRoute.props ?? true,
-    }
-
-    this.router.removeRoute(targetName)
-    this.router.addRoute(routeConfig)
-
-    this.isRecovering = false
-    sessionStorage.removeItem(this.options.retryKey)
-
-    try {
-      await this.router.replace(to.fullPath)
-    } catch {
-      this.fallbackNavigation(to)
+    const current = this.router.currentRoute.value as RouteLocationNormalized
+    if (current.meta) {
+      current.meta._pageChunk = module
     }
   }
 
   private fallbackNavigation(to: RouteLocationNormalized): void {
     this.toast.show('fallback', '回退到整页导航', to.fullPath)
+    this.isRecovering = false
+    sessionStorage.removeItem(this.options.retryKey)
     const target = to.fullPath
     if (location.pathname + location.search !== target) {
       location.href = target
