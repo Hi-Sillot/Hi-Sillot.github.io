@@ -373,6 +373,8 @@ export class ChunkRetryManager {
     const failedUrl = extractFailedUrl(error)
     const shortUrl = this.shortenUrl(failedUrl)
 
+    this.signalNProgressError()
+
     if (this.isRecovering) {
       if (this.pendingRecovery) {
         this.pendingRecovery.catch(() => this.fallbackNavigation(to))
@@ -388,6 +390,7 @@ export class ChunkRetryManager {
       this.isApplyingModule = true
       this.router.replace(to.fullPath).then(() => {
         this.isApplyingModule = false
+        this.restoreNProgress()
         this.toast.show('success', '页面恢复成功', to.fullPath)
       }).catch(() => {
         this.isApplyingModule = false
@@ -428,6 +431,7 @@ export class ChunkRetryManager {
       try {
         await this.router.replace(to.fullPath)
         this.isApplyingModule = false
+        this.restoreNProgress()
         this.toast.show('success', '页面恢复成功', to.fullPath)
       } catch {
         this.isApplyingModule = false
@@ -472,6 +476,7 @@ export class ChunkRetryManager {
       this.toast.show('retrying', '正在恢复页面组件...', shortUrl)
       const module = await this.retryImportWithCacheBusting(failedUrl)
       this.recoveredModules.set(failedUrl, module)
+      this.restoreNProgress()
       this.toast.show('success', '页面组件恢复成功', shortUrl)
       this.tryReloadCurrentPage(failedUrl)
     } catch {
@@ -561,10 +566,29 @@ export class ChunkRetryManager {
     }
   }
 
+  private signalNProgressError(): void {
+    document.documentElement.style.setProperty('--nprogress-c', '#f85149')
+    const nprogress = document.getElementById('nprogress')
+    if (!nprogress) return
+    const bar = nprogress.querySelector('[role="bar"]') as HTMLElement | null
+    if (!bar) return
+    bar.style.transition = 'all 2s ease'
+  }
+
+  private restoreNProgress(): void {
+    document.documentElement.style.removeProperty('--nprogress-c')
+    const nprogress = document.getElementById('nprogress')
+    if (!nprogress) return
+    const bar = nprogress.querySelector('[role="bar"]') as HTMLElement | null
+    if (!bar) return
+    bar.style.transition = ''
+  }
+
   private fallbackNavigation(to: RouteLocationNormalized): void {
     this.toast.show('fallback', '回退到整页导航', to.fullPath)
     this.isRecovering = false
     this.isApplyingModule = false
+    this.restoreNProgress()
     sessionStorage.removeItem(this.options.retryKey)
     const target = to.fullPath
     if (location.pathname + location.search !== target) {

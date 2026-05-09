@@ -228,6 +228,7 @@ const server = http.createServer((req, res) => {
 
   if (config.dns.enabled && matchPattern(reqUrl, config.dns.pattern)) {
     stats.polluted++
+    scheduleBroadcast()
     if (config.dns.mode === 'refuse') {
       res.writeHead(502, { 'Content-Type': 'text/plain' })
       res.end('ERR_CONNECTION_REFUSED (simulated DNS pollution)')
@@ -252,6 +253,7 @@ const server = http.createServer((req, res) => {
 
     if (rand < config.volatility.failRate) {
       stats.failed++
+      scheduleBroadcast()
       res.writeHead(503, { 'Content-Type': 'text/plain' })
       res.end('Service Unavailable (simulated network failure)')
       return
@@ -259,6 +261,7 @@ const server = http.createServer((req, res) => {
 
     if (rand < config.volatility.failRate + config.volatility.resetRate) {
       stats.failed++
+      scheduleBroadcast()
       res.writeHead(200, { 'Content-Type': 'application/octet-stream' })
       res.write('partial data...')
       res.destroy()
@@ -291,6 +294,7 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
 
   if (shouldTruncate && !shouldThrottle) {
     stats.truncated++
+    scheduleBroadcast()
     const originalBody = []
     proxyRes.on('data', (chunk) => originalBody.push(chunk))
     proxyRes.on('end', () => {
@@ -315,6 +319,7 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
 
     if (effectiveLatency > 0) {
       stats.delayed++
+      scheduleBroadcast()
       const originalHeaders = { ...proxyRes.headers }
       const bodyChunks = []
       proxyRes.on('data', (chunk) => bodyChunks.push(chunk))
@@ -326,6 +331,7 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
 
           if (shouldTruncate) {
             stats.truncated++
+            scheduleBroadcast()
             const cutPoint = Math.floor(body.length * (0.3 + Math.random() * 0.4))
             const headers = { ...originalHeaders }
             delete headers['content-encoding']
@@ -345,6 +351,7 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
 
     if (effectiveBandwidth > 0) {
       stats.throttled++
+      scheduleBroadcast()
       const throttle = new ThrottleStream(effectiveBandwidth)
       res.writeHead(proxyRes.statusCode, proxyRes.headers)
       proxyRes.pipe(throttle).pipe(res)
@@ -384,6 +391,15 @@ function broadcastState() {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) client.send(msg)
   })
+}
+
+let broadcastTimer = null
+function scheduleBroadcast() {
+  if (broadcastTimer) return
+  broadcastTimer = setTimeout(() => {
+    broadcastState()
+    broadcastTimer = null
+  }, 200)
 }
 
 wss.on('connection', (ws) => {
@@ -467,6 +483,11 @@ function CHAOS_INJECT_SCRIPT() {
 #chaos-fab.preset-custom{border-color:#f0883e;background:rgba(22,27,34,.92);box-shadow:0 0 16px rgba(240,136,62,.2)}
 #chaos-fab.preset-custom .fab-preset{color:#f0883e}
 #chaos-fab.flash{animation:chaos-flash .5s ease}
+#chaos-fab .fab-interfere{display:none;font-size:13px;line-height:1}
+#chaos-fab.interfering .fab-interfere{display:inline;animation:chaos-zap .4s ease infinite}
+#chaos-fab.interfered{animation:chaos-interfered .6s ease}
+@keyframes chaos-zap{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes chaos-interfered{0%{filter:brightness(1)}20%{filter:brightness(2);transform:scale(1.08)}40%{filter:brightness(1.2)}60%{filter:brightness(1.8);transform:scale(1.04)}80%{filter:brightness(1.3)}100%{filter:brightness(1);transform:scale(1)}}
 @keyframes chaos-flash{0%{transform:scale(1)}25%{transform:scale(1.12);filter:brightness(1.4)}50%{transform:scale(.97)}75%{transform:scale(1.03)}100%{transform:scale(1);filter:brightness(1)}}
 @keyframes chaos-breathe-green{0%,100%{transform:scale(1)}50%{transform:scale(1.15);filter:brightness(1.2)}}
 @keyframes chaos-breathe-yellow{0%,100%{transform:scale(1)}50%{transform:scale(1.18);filter:brightness(1.3)}}
@@ -526,7 +547,7 @@ function CHAOS_INJECT_SCRIPT() {
   const fab=document.createElement('button');
   fab.id='chaos-fab';
   fab.title='Network Chaos Panel';
-  fab.innerHTML='<span class="fab-icon">🔥</span><span class="fab-info"><span class="fab-dot off" id="fabDot"></span><span class="fab-preset" id="fabPreset">--</span><span class="fab-sep">|</span><span class="fab-stat">❌<span id="fabFail">0</span></span></span>';
+  fab.innerHTML='<span class="fab-icon">🔥</span><span class="fab-interfere" id="fabInterfere">⚡</span><span class="fab-info"><span class="fab-dot off" id="fabDot"></span><span class="fab-preset" id="fabPreset">--</span><span class="fab-sep">|</span><span class="fab-stat">❌<span id="fabFail">0</span></span></span>';
   document.body.appendChild(fab);
 
   const panel=document.createElement('div');
@@ -601,6 +622,7 @@ function CHAOS_INJECT_SCRIPT() {
     ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='state')updUI(m.config,m.stats)};
   }
 
+  var prevFailed=0;
   function updUI(c,s){
     document.getElementById('cpOn').checked=c.enabled;
     document.getElementById('cpDnsOn').checked=c.dns.enabled;
@@ -623,6 +645,14 @@ function CHAOS_INJECT_SCRIPT() {
       document.getElementById('csPoll').textContent=s.polluted;
       document.getElementById('csThrot').textContent=s.throttled;
       document.getElementById('fabFail').textContent=s.failed;
+      if(s.failed>prevFailed){
+        fab.classList.add('interfered');
+        setTimeout(function(){fab.classList.remove('interfered')},600);
+        fab.classList.add('interfering');
+        clearTimeout(fab._interfereTimer);
+        fab._interfereTimer=setTimeout(function(){fab.classList.remove('interfering')},3000);
+      }
+      prevFailed=s.failed;
     }
     var presetKey='custom';
     if(!c.enabled) presetKey='off';

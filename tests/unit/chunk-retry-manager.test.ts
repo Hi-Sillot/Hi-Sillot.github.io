@@ -520,6 +520,73 @@ describe('ChunkRetryManager', () => {
     })
   })
 
+  describe('NProgress integration', () => {
+    it('signalNProgressError sets CSS variable and slows transition', () => {
+      manager.init()
+
+      const nprogress = document.createElement('div')
+      nprogress.id = 'nprogress'
+      const bar = document.createElement('div')
+      bar.setAttribute('role', 'bar')
+      nprogress.appendChild(bar)
+      document.body.appendChild(nprogress)
+
+      ;(manager as any).signalNProgressError()
+
+      expect(document.documentElement.style.getPropertyValue('--nprogress-c')).toBe('#f85149')
+      expect(bar.style.transition).toBe('all 2s ease')
+    })
+
+    it('restoreNProgress removes CSS variable and resets transition', () => {
+      manager.init()
+
+      const nprogress = document.createElement('div')
+      nprogress.id = 'nprogress'
+      const bar = document.createElement('div')
+      bar.setAttribute('role', 'bar')
+      nprogress.appendChild(bar)
+      document.body.appendChild(nprogress)
+
+      ;(manager as any).signalNProgressError()
+      ;(manager as any).restoreNProgress()
+
+      expect(document.documentElement.style.getPropertyValue('--nprogress-c')).toBe('')
+      expect(bar.style.transition).toBe('')
+    })
+
+    it('signalNProgressError is called when chunk failure is detected', () => {
+      manager.init()
+      const signalSpy = vi.spyOn(manager as any, 'signalNProgressError')
+
+      const onErrorFn = router._guards.onError[0]
+      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
+
+      expect(signalSpy).toHaveBeenCalled()
+      signalSpy.mockRestore()
+    })
+
+    it('restoreNProgress is called on fallback navigation', () => {
+      manager.init()
+      const restoreSpy = vi.spyOn(manager as any, 'restoreNProgress')
+
+      const onErrorFn = router._guards.onError[0]
+      onErrorFn(new Error('Importing a module script failed.'), createMockLocation('/test/'), createMockLocation('/'))
+
+      expect(restoreSpy).toHaveBeenCalled()
+      restoreSpy.mockRestore()
+    })
+
+    it('signalNProgressError handles missing nprogress element gracefully', () => {
+      manager.init()
+      expect(() => (manager as any).signalNProgressError()).not.toThrow()
+    })
+
+    it('restoreNProgress handles missing nprogress element gracefully', () => {
+      manager.init()
+      expect(() => (manager as any).restoreNProgress()).not.toThrow()
+    })
+  })
+
   describe('destroy', () => {
     it('removes vite:preloadError listener', () => {
       manager.init()
