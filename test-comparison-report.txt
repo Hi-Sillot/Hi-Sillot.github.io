@@ -1,60 +1,113 @@
 === Chunk Retry Plugin A/B Comparison Test Report ===
-Date: 2026-05-08T22:23:23.073Z
+Date: 2026-05-09T00:32:25.060Z
 
 --- Phase A: WITHOUT plugin ---
-  [single-transient-no-plugin] FAIL | recovery=15554ms
-  [single-transient-no-plugin] FAIL | recovery=15554ms
-  [consecutive-no-plugin] FAIL | recovery=20594ms
-  [single-transient-no-plugin] FAIL | recovery=15554ms
-  [consecutive-no-plugin] FAIL | recovery=20594ms
-  [boundary-retry-no-plugin] FAIL | recovery=30549ms
-  [single-transient-no-plugin] FAIL | recovery=15554ms
-  [consecutive-no-plugin] FAIL | recovery=20594ms
-  [boundary-retry-no-plugin] FAIL | recovery=30549ms
+  [single-transient-no-plugin] FAIL | recovery=0ms
+  [single-transient-no-plugin] FAIL | recovery=0ms
+  [consecutive-no-plugin] FAIL | recovery=0ms
+  [single-transient-no-plugin] FAIL | recovery=0ms
+  [consecutive-no-plugin] FAIL | recovery=0ms
+  [boundary-retry-no-plugin] FAIL | recovery=0ms
+  [single-transient-no-plugin] FAIL | recovery=0ms
+  [consecutive-no-plugin] FAIL | recovery=0ms
+  [boundary-retry-no-plugin] FAIL | recovery=0ms
   [persistent-no-plugin] FAIL | recovery=0ms
-  [single-transient-no-plugin] FAIL | recovery=15554ms
-  [consecutive-no-plugin] FAIL | recovery=20594ms
-  [boundary-retry-no-plugin] FAIL | recovery=30549ms
+  [single-transient-no-plugin] FAIL | recovery=0ms
+  [consecutive-no-plugin] FAIL | recovery=0ms
+  [boundary-retry-no-plugin] FAIL | recovery=0ms
   [persistent-no-plugin] FAIL | recovery=0ms
-  [multi-page-no-plugin] FAIL | recovery=15442ms
-  [single-transient-no-plugin] FAIL | recovery=15554ms
-  [consecutive-no-plugin] FAIL | recovery=20594ms
-  [boundary-retry-no-plugin] FAIL | recovery=30549ms
+  [multi-page-no-plugin] FAIL | recovery=0ms
+  [single-transient-no-plugin] FAIL | recovery=0ms
+  [consecutive-no-plugin] FAIL | recovery=0ms
+  [boundary-retry-no-plugin] FAIL | recovery=0ms
   [persistent-no-plugin] FAIL | recovery=0ms
-  [multi-page-no-plugin] FAIL | recovery=15442ms
+  [multi-page-no-plugin] FAIL | recovery=0ms
   [exceed-max-retries-no-plugin] FAIL | recovery=0ms
 
 --- Phase B: WITH plugin ---
-  [single-transient-with-plugin] FAIL | recovery=0ms
-  [consecutive-with-plugin] FAIL | recovery=0ms
-  [boundary-retry-with-plugin] FAIL | recovery=0ms
+  [single-transient-with-plugin] PASS | recovery=1518ms
+  [single-transient-with-plugin] PASS | recovery=1518ms
+  [consecutive-with-plugin] PASS | recovery=1540ms
+  [single-transient-with-plugin] PASS | recovery=1518ms
+  [consecutive-with-plugin] PASS | recovery=1540ms
+  [boundary-retry-with-plugin] PASS | recovery=1578ms
+  [single-transient-with-plugin] PASS | recovery=1518ms
+  [consecutive-with-plugin] PASS | recovery=1540ms
+  [boundary-retry-with-plugin] PASS | recovery=1578ms
   [persistent-with-plugin] FAIL | recovery=0ms
+  [single-transient-with-plugin] PASS | recovery=1518ms
+  [consecutive-with-plugin] PASS | recovery=1540ms
+  [boundary-retry-with-plugin] PASS | recovery=1578ms
   [persistent-with-plugin] FAIL | recovery=0ms
-  [multi-page-with-plugin] FAIL | recovery=0ms
+  [multi-page-with-plugin] PASS | recovery=5ms
+  [single-transient-with-plugin] PASS | recovery=1518ms
+  [consecutive-with-plugin] PASS | recovery=1540ms
+  [boundary-retry-with-plugin] PASS | recovery=1578ms
   [persistent-with-plugin] FAIL | recovery=0ms
-  [multi-page-with-plugin] FAIL | recovery=0ms
-  [non-chunk-css-with-plugin] FAIL | recovery=0ms
-  [intermittent-with-plugin] FAIL | recovery=0ms
-  [rapid-back-to-back-with-plugin] FAIL | recovery=20855ms
-  [recovery-then-home-with-plugin] FAIL | recovery=0ms
-  [recovery-then-home-with-plugin] FAIL | recovery=0ms
-  [delayed-failure-with-plugin] FAIL | recovery=0ms
-  [exceed-max-retries-with-plugin] FAIL | recovery=0ms
+  [multi-page-with-plugin] PASS | recovery=5ms
+  [non-chunk-css-with-plugin] PASS | recovery=9ms
+  [single-transient-with-plugin] PASS | recovery=1518ms
+  [consecutive-with-plugin] PASS | recovery=1540ms
+  [boundary-retry-with-plugin] PASS | recovery=1578ms
+  [persistent-with-plugin] FAIL | recovery=0ms
+  [multi-page-with-plugin] PASS | recovery=5ms
+  [non-chunk-css-with-plugin] PASS | recovery=9ms
+  [intermittent-with-plugin] PASS | recovery=1532ms
+  [single-transient-with-plugin] PASS | recovery=1518ms
+  [consecutive-with-plugin] PASS | recovery=1540ms
+  [boundary-retry-with-plugin] PASS | recovery=1578ms
+  [persistent-with-plugin] FAIL | recovery=0ms
+  [multi-page-with-plugin] PASS | recovery=5ms
+  [non-chunk-css-with-plugin] PASS | recovery=9ms
+  [intermittent-with-plugin] PASS | recovery=1532ms
+  [rapid-back-to-back-with-plugin] PASS | recovery=1541ms
+  [single-transient-with-plugin] PASS | recovery=1518ms
+  [consecutive-with-plugin] PASS | recovery=1540ms
+  [boundary-retry-with-plugin] PASS | recovery=1578ms
+  [persistent-with-plugin] FAIL | recovery=0ms
+  [multi-page-with-plugin] PASS | recovery=5ms
+  [non-chunk-css-with-plugin] PASS | recovery=9ms
+  [intermittent-with-plugin] PASS | recovery=1532ms
+  [rapid-back-to-back-with-plugin] PASS | recovery=1541ms
+  [recovery-then-home-with-plugin] PASS | recovery=13ms
+  [single-transient-with-plugin] PASS | recovery=1518ms
+  [consecutive-with-plugin] PASS | recovery=1540ms
+  [boundary-retry-with-plugin] PASS | recovery=1578ms
+  [persistent-with-plugin] FAIL | recovery=0ms
+  [multi-page-with-plugin] PASS | recovery=5ms
+  [non-chunk-css-with-plugin] PASS | recovery=9ms
+  [intermittent-with-plugin] PASS | recovery=1532ms
+  [rapid-back-to-back-with-plugin] PASS | recovery=1541ms
+  [recovery-then-home-with-plugin] PASS | recovery=13ms
+  [delayed-failure-with-plugin] PASS | recovery=1520ms
+  [single-transient-with-plugin] PASS | recovery=1518ms
+  [consecutive-with-plugin] PASS | recovery=1540ms
+  [boundary-retry-with-plugin] PASS | recovery=1578ms
+  [persistent-with-plugin] FAIL | recovery=0ms
+  [multi-page-with-plugin] PASS | recovery=5ms
+  [non-chunk-css-with-plugin] PASS | recovery=9ms
+  [intermittent-with-plugin] PASS | recovery=1532ms
+  [rapid-back-to-back-with-plugin] PASS | recovery=1541ms
+  [recovery-then-home-with-plugin] PASS | recovery=13ms
+  [delayed-failure-with-plugin] PASS | recovery=1520ms
+  [exceed-max-retries-with-plugin] PASS | recovery=2021ms
 
 === Comparison Summary ===
 
 Scenario                                 | No Plugin       | With Plugin     | Delta
 ------------------------------------------------------------------------------------------
-single-transient                         | FAIL   15554ms  | FAIL   0ms      | SAME
-consecutive                              | FAIL   20594ms  | FAIL   0ms      | SAME
-boundary-retry                           | FAIL   30549ms  | FAIL   0ms      | SAME
+single-transient                         | FAIL   0ms      | PASS   1518ms   | FIXED
+consecutive                              | FAIL   0ms      | PASS   1540ms   | FIXED
+boundary-retry                           | FAIL   0ms      | PASS   1578ms   | FIXED
 persistent                               | FAIL   0ms      | FAIL   0ms      | SAME
-multi-page                               | FAIL   15442ms  | FAIL   0ms      | SAME
-exceed-max-retries                       | FAIL   0ms      | FAIL   0ms      | SAME
-non-chunk-css                            | N/A    N/A      | FAIL   0ms      | N/A
-intermittent                             | N/A    N/A      | FAIL   0ms      | N/A
-rapid-back-to-back                       | N/A    N/A      | FAIL   20855ms  | N/A
-recovery-then-home                       | N/A    N/A      | FAIL   0ms      | N/A
-delayed-failure                          | N/A    N/A      | FAIL   0ms      | N/A
+multi-page                               | FAIL   0ms      | PASS   5ms      | FIXED
+exceed-max-retries                       | FAIL   0ms      | PASS   2021ms   | FIXED
+non-chunk-css                            | N/A    N/A      | PASS   9ms      | N/A
+intermittent                             | N/A    N/A      | PASS   1532ms   | N/A
+rapid-back-to-back                       | N/A    N/A      | PASS   1541ms   | N/A
+recovery-then-home                       | N/A    N/A      | PASS   13ms     | N/A
+delayed-failure                          | N/A    N/A      | PASS   1520ms   | N/A
 
-INCONCLUSIVE: Could not demonstrate a clear difference.
+CONCLUSION: Plugin EFFECTIVELY fixes chunk loading failures.
+  Without plugin: 21/21 scenarios FAILED
+  With plugin: 58/66 scenarios PASSED

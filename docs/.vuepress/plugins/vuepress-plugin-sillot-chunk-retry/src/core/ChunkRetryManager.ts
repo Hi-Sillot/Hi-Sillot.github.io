@@ -17,6 +17,11 @@ export class ChunkRetryManager {
   private isRecovering = false
   private prefetchPromise: Promise<any> | null = null
   private prefetchUrl: string | null = null
+  private recoveredUrls: Set<string> = new Set()
+  private recoveredModules: Map<string, any> = new Map()
+  private phantomRetryCount = 0
+  private recoveryGeneration = 0
+  private recoveryTarget: RouteLocationNormalized | null = null
 
   constructor(router: RouterLike, options: ChunkRetryOptions = {}) {
     this.router = router
@@ -34,8 +39,12 @@ export class ChunkRetryManager {
       this.pendingTarget = null
       this.retryCount = 0
       this.isRecovering = false
+      this.recoveryTarget = null
       this.prefetchPromise = null
       this.prefetchUrl = null
+      this.recoveredUrls.clear()
+      this.recoveredModules.clear()
+      this.phantomRetryCount = 0
       sessionStorage.removeItem(this.options.retryKey)
     })
 
@@ -51,9 +60,19 @@ export class ChunkRetryManager {
     const failedUrl = extractFailedUrl(error)
     if (!failedUrl) return
 
+    if (this.recoveredUrls.has(failedUrl) && this.recoveredModules.has(failedUrl)) {
+      return
+    }
+
     if (!this.prefetchUrl || this.prefetchUrl !== failedUrl) {
       this.prefetchUrl = failedUrl
-      this.prefetchPromise = this.retryImportWithCacheBusting(failedUrl).catch(() => null)
+      this.prefetchPromise = this.retryImportWithCacheBusting(failedUrl)
+        .then(module => {
+          this.recoveredUrls.add(failedUrl)
+          this.recoveredModules.set(failedUrl, module)
+          return module
+        })
+        .catch(() => null)
     }
   }
 
@@ -61,27 +80,50 @@ export class ChunkRetryManager {
     if (!isDynamicImportError(error)) return
 
     if (this.isRecovering) {
-      if (this.pendingRecovery) {
-        this.pendingRecovery.catch(() => this.fallbackNavigation(to))
+      if (this.recoveryTarget && this.recoveryTarget.fullPath !== to.fullPath) {
+        this.isRecovering = false
+        this.pendingRecovery = null
+        this.recoveryTarget = null
+        this.retryCount = 0
+        sessionStorage.removeItem(this.options.retryKey)
+      } else {
+        if (this.pendingRecovery) {
+          this.pendingRecovery.catch(() => this.fallbackNavigation(to))
+        }
+        return
       }
-      return
     }
-    if (sessionStorage.getItem(this.options.retryKey)) return
-
-    this.isRecovering = true
-    sessionStorage.setItem(this.options.retryKey, String(Date.now()))
 
     const failedUrl = extractFailedUrl(error)
 
+    if (failedUrl && this.recoveredUrls.has(failedUrl)) {
+      this.phantomRetryCount++
+      if (this.phantomRetryCount <= 3) {
+        this.router.push(to.fullPath).catch(() => {
+          this.fallbackNavigation(to)
+        })
+        return
+      }
+      this.fallbackNavigation(to)
+      return
+    }
+
+    if (sessionStorage.getItem(this.options.retryKey)) return
+
+    this.isRecovering = true
+    this.recoveryGeneration++
+    this.recoveryTarget = to
+    sessionStorage.setItem(this.options.retryKey, String(Date.now()))
+
     if (failedUrl && this.retryCount < this.options.maxRetries) {
-      this.pendingRecovery = this.recoverWithCacheBusting(failedUrl, to)
+      this.pendingRecovery = this.recoverWithCacheBusting(failedUrl, to, this.recoveryGeneration)
       this.pendingRecovery.finally(() => { this.pendingRecovery = null })
     } else {
       this.fallbackNavigation(to)
     }
   }
 
-  private async recoverWithCacheBusting(failedUrl: string, to: RouteLocationNormalized): Promise<void> {
+  private async recoverWithCacheBusting(failedUrl: string, to: RouteLocationNormalized, generation: number): Promise<void> {
     try {
       let module: any
 
@@ -89,21 +131,33 @@ export class ChunkRetryManager {
         module = await this.prefetchPromise
         this.prefetchPromise = null
         this.prefetchUrl = null
+        if (module) {
+          this.recoveredUrls.add(failedUrl)
+          this.recoveredModules.set(failedUrl, module)
+        }
       }
+
+      if (this.recoveryGeneration !== generation) return
 
       if (!module) {
         module = await this.retryImportWithCacheBusting(failedUrl)
+        this.recoveredUrls.add(failedUrl)
+        this.recoveredModules.set(failedUrl, module)
       }
+
+      if (this.recoveryGeneration !== generation) return
 
       await this.updateRouteAndRetry(to, module)
     } catch {
+      if (this.recoveryGeneration !== generation) return
+
       this.retryCount++
       if (this.retryCount < this.options.maxRetries) {
         const delay = this.options.retryDelay * this.retryCount
         await new Promise(resolve => setTimeout(resolve, delay))
         this.isRecovering = false
         sessionStorage.removeItem(this.options.retryKey)
-        await this.recoverWithCacheBusting(failedUrl, to)
+        await this.recoverWithCacheBusting(failedUrl, to, generation)
       } else {
         this.fallbackNavigation(to)
       }
@@ -132,16 +186,21 @@ export class ChunkRetryManager {
       return
     }
 
+    const cachedModule = module
     const routeConfig = {
       path: matchedRoute.path,
       name: matchedRoute.name,
-      component: module.default || module,
+      component: () => Promise.resolve(cachedModule),
       meta: matchedRoute.meta || {},
       props: matchedRoute.props ?? true,
     }
 
     this.router.removeRoute(targetName)
     this.router.addRoute(routeConfig)
+
+    this.isRecovering = false
+    sessionStorage.removeItem(this.options.retryKey)
+    this.phantomRetryCount = 0
 
     try {
       await this.router.push(to.fullPath)

@@ -48,30 +48,47 @@ async function spaNavigate(page, path) {
   }, path)
 }
 
-async function verifyPageLoaded(page, expectedPath) {
+async function waitForPageLoad(page, expectedPath, timeout = 15000): Promise<{ loaded: boolean; reason: string | null; timeMs: number }> {
+  const start = Date.now()
+  const normalized = expectedPath.replace('.html', '').replace(/\/$/, '')
+
+  while (Date.now() - start < timeout) {
+    const currentUrl = page.url()
+    const urlMatch = currentUrl.includes(normalized)
+
+    if (urlMatch) {
+      const contentLen = await page.evaluate(() => {
+        const selectors = ['.vp-page', '.vp-doc', '#app main', '.page-content', '.home']
+        for (const sel of selectors) {
+          const el = document.querySelector(sel)
+          if (el && el.innerHTML.length > 50) return el.innerHTML.length
+        }
+        return 0
+      })
+
+      if (contentLen > 50) {
+        return { loaded: true, reason: null, timeMs: Date.now() - start }
+      }
+    }
+
+    await page.waitForTimeout(500)
+  }
+
   const currentUrl = page.url()
-  const urlMatch = currentUrl.includes(expectedPath.replace('.html', '').replace(/\/$/, ''))
-  if (!urlMatch) return { loaded: false, reason: 'url-mismatch' }
+  const urlMatch = currentUrl.includes(normalized)
+  if (!urlMatch) return { loaded: false, reason: 'url-mismatch', timeMs: Date.now() - start }
 
   const contentLen = await page.evaluate(() => {
-    const main = document.querySelector('.vp-page')
-    return main ? main.innerHTML.length : 0
+    const selectors = ['.vp-page', '.vp-doc', '#app main', '.page-content', '.home']
+    for (const sel of selectors) {
+      const el = document.querySelector(sel)
+      if (el && el.innerHTML.length > 50) return el.innerHTML.length
+    }
+    return 0
   })
-  if (contentLen < 50) return { loaded: false, reason: 'empty-content' }
+  if (contentLen < 50) return { loaded: false, reason: 'empty-content', timeMs: Date.now() - start }
 
-  return { loaded: true, reason: null }
-}
-
-async function checkPluginLoaded(page): Promise<boolean> {
-  return page.evaluate(() => {
-    const app = document.querySelector('#app')?.__vue_app__
-    if (!app) return false
-    const router = app.config.globalProperties.$router
-    if (!router) return false
-    const hasBeforeEach = router.beforeEach?.__chunkRetryRegistered
-    const listeners = window.hasOwnProperty('__chunkRetryListeners')
-    return true
-  })
+  return { loaded: true, reason: null, timeMs: Date.now() - start }
 }
 
 const PLUGIN_ENABLED = process.env.CHUNK_RETRY_PLUGIN !== 'disabled'
@@ -93,33 +110,17 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     await simulator.start()
 
     const navResult = await spaNavigate(page, targetPath)
+    const result = await waitForPageLoad(page, targetPath, 15000)
 
-    try {
-      await page.waitForURL(`**${targetPath.replace(/\.html$/, '').replace(/\/$/, '')}**`, { timeout: 15000 })
-      const end = Date.now()
-      const verify = await verifyPageLoaded(page, targetPath)
-
-      metrics.add({
-        scenario: `single-transient-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: verify.loaded,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: verify.loaded ? end - start : 0,
-        pageLoaded: verify.loaded,
-        errorMessage: verify.loaded ? null : `${navResult} | ${verify.reason}`,
-      })
-    } catch (error) {
-      const end = Date.now()
-      metrics.add({
-        scenario: `single-transient-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: false,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: end - start,
-        pageLoaded: false,
-        errorMessage: `${navResult} | ${error instanceof Error ? error.message : String(error)}`,
-      })
-    }
+    metrics.add({
+      scenario: `single-transient-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
+      success: result.loaded,
+      navigationStartTime: start,
+      navigationEndTime: Date.now(),
+      recoveryTimeMs: result.loaded ? result.timeMs : 0,
+      pageLoaded: result.loaded,
+      errorMessage: result.loaded ? null : `${navResult} | ${result.reason}`,
+    })
 
     await simulator.stop()
     console.log(metrics.formatReport())
@@ -144,33 +145,17 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     await simulator.start()
 
     const navResult = await spaNavigate(page, targetPath)
+    const result = await waitForPageLoad(page, targetPath, 20000)
 
-    try {
-      await page.waitForURL(`**${targetPath.replace(/\.html$/, '').replace(/\/$/, '')}**`, { timeout: 20000 })
-      const end = Date.now()
-      const verify = await verifyPageLoaded(page, targetPath)
-
-      metrics.add({
-        scenario: `consecutive-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: verify.loaded,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: verify.loaded ? end - start : 0,
-        pageLoaded: verify.loaded,
-        errorMessage: verify.loaded ? null : `${navResult} | ${verify.reason}`,
-      })
-    } catch (error) {
-      const end = Date.now()
-      metrics.add({
-        scenario: `consecutive-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: false,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: end - start,
-        pageLoaded: false,
-        errorMessage: `${navResult} | ${error instanceof Error ? error.message : String(error)}`,
-      })
-    }
+    metrics.add({
+      scenario: `consecutive-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
+      success: result.loaded,
+      navigationStartTime: start,
+      navigationEndTime: Date.now(),
+      recoveryTimeMs: result.loaded ? result.timeMs : 0,
+      pageLoaded: result.loaded,
+      errorMessage: result.loaded ? null : `${navResult} | ${result.reason}`,
+    })
 
     await simulator.stop()
     console.log(metrics.formatReport())
@@ -195,33 +180,17 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     await simulator.start()
 
     const navResult = await spaNavigate(page, targetPath)
+    const result = await waitForPageLoad(page, targetPath, 30000)
 
-    try {
-      await page.waitForURL(`**${targetPath.replace(/\.html$/, '').replace(/\/$/, '')}**`, { timeout: 30000 })
-      const end = Date.now()
-      const verify = await verifyPageLoaded(page, targetPath)
-
-      metrics.add({
-        scenario: `boundary-retry-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: verify.loaded,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: verify.loaded ? end - start : 0,
-        pageLoaded: verify.loaded,
-        errorMessage: verify.loaded ? null : `${navResult} | ${verify.reason}`,
-      })
-    } catch (error) {
-      const end = Date.now()
-      metrics.add({
-        scenario: `boundary-retry-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: false,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: end - start,
-        pageLoaded: false,
-        errorMessage: `${navResult} | ${error instanceof Error ? error.message : String(error)}`,
-      })
-    }
+    metrics.add({
+      scenario: `boundary-retry-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
+      success: result.loaded,
+      navigationStartTime: start,
+      navigationEndTime: Date.now(),
+      recoveryTimeMs: result.loaded ? result.timeMs : 0,
+      pageLoaded: result.loaded,
+      errorMessage: result.loaded ? null : `${navResult} | ${result.reason}`,
+    })
 
     await simulator.stop()
     console.log(metrics.formatReport())
@@ -246,20 +215,16 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     await simulator.start()
 
     const navResult = await spaNavigate(page, targetPath)
+    const result = await waitForPageLoad(page, targetPath, 8000)
 
-    await page.waitForTimeout(8000)
-
-    const verify = await verifyPageLoaded(page, targetPath)
-
-    const end = Date.now()
     metrics.add({
       scenario: `persistent-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-      success: verify.loaded,
+      success: result.loaded,
       navigationStartTime: start,
-      navigationEndTime: end,
-      recoveryTimeMs: verify.loaded ? end - start : 0,
-      pageLoaded: verify.loaded,
-      errorMessage: verify.loaded ? null : `Navigation stuck or page empty after persistent failure | ${navResult} | ${verify.reason}`,
+      navigationEndTime: Date.now(),
+      recoveryTimeMs: result.loaded ? result.timeMs : 0,
+      pageLoaded: result.loaded,
+      errorMessage: result.loaded ? null : `Navigation stuck or page empty after persistent failure | ${navResult} | ${result.reason}`,
     })
 
     await simulator.stop()
@@ -287,70 +252,40 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     const start = Date.now()
     await spaNavigate(page, firstPath)
 
-    try {
-      await page.waitForURL(`**${firstPath.replace(/\.html$/, '').replace(/\/$/, '')}**`, { timeout: 15000 })
-      const verify1 = await verifyPageLoaded(page, firstPath)
+    const result1 = await waitForPageLoad(page, firstPath, 15000)
 
-      if (!verify1.loaded) {
-        metrics.add({
-          scenario: `multi-page-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-          success: false,
-          navigationStartTime: start,
-          navigationEndTime: Date.now(),
-          recoveryTimeMs: 0,
-          pageLoaded: false,
-          errorMessage: `First page failed: ${verify1.reason}`,
-        })
-        await simulator.stop()
-        console.log(metrics.formatReport())
-        return
-      }
-
-      await page.waitForTimeout(500)
-
-      const secondLinks = await findAllNavLinks(page)
-      const nextPath = secondLinks.length > 0 ? secondLinks[0] : secondPath
-
-      await spaNavigate(page, nextPath)
-
-      try {
-        await page.waitForURL(`**${nextPath.replace(/\.html$/, '').replace(/\/$/, '')}**`, { timeout: 15000 })
-        const verify2 = await verifyPageLoaded(page, nextPath)
-        const end = Date.now()
-
-        metrics.add({
-          scenario: `multi-page-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-          success: verify2.loaded,
-          navigationStartTime: start,
-          navigationEndTime: end,
-          recoveryTimeMs: end - start,
-          pageLoaded: verify2.loaded,
-          errorMessage: verify2.loaded ? null : `Second page failed: ${verify2.reason}`,
-        })
-      } catch (error) {
-        const end = Date.now()
-        metrics.add({
-          scenario: `multi-page-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-          success: false,
-          navigationStartTime: start,
-          navigationEndTime: end,
-          recoveryTimeMs: end - start,
-          pageLoaded: false,
-          errorMessage: `Second page error: ${error instanceof Error ? error.message : String(error)}`,
-        })
-      }
-    } catch (error) {
-      const end = Date.now()
+    if (!result1.loaded) {
       metrics.add({
         scenario: `multi-page-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
         success: false,
         navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: end - start,
+        navigationEndTime: Date.now(),
+        recoveryTimeMs: 0,
         pageLoaded: false,
-        errorMessage: `First page error: ${error instanceof Error ? error.message : String(error)}`,
+        errorMessage: `First page failed: ${result1.reason}`,
       })
+      await simulator.stop()
+      console.log(metrics.formatReport())
+      return
     }
+
+    await page.waitForTimeout(500)
+
+    const secondLinks = await findAllNavLinks(page)
+    const nextPath = secondLinks.length > 0 ? secondLinks[0] : secondPath
+
+    await spaNavigate(page, nextPath)
+    const result2 = await waitForPageLoad(page, nextPath, 15000)
+
+    metrics.add({
+      scenario: `multi-page-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
+      success: result2.loaded,
+      navigationStartTime: start,
+      navigationEndTime: Date.now(),
+      recoveryTimeMs: result2.loaded ? result2.timeMs : 0,
+      pageLoaded: result2.loaded,
+      errorMessage: result2.loaded ? null : `Second page failed: ${result2.reason}`,
+    })
 
     await simulator.stop()
     console.log(metrics.formatReport())
@@ -380,33 +315,17 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     await cssSimulator.start()
 
     const navResult = await spaNavigate(page, targetPath)
+    const result = await waitForPageLoad(page, targetPath, 15000)
 
-    try {
-      await page.waitForURL(`**${targetPath.replace(/\.html$/, '').replace(/\/$/, '')}**`, { timeout: 15000 })
-      const end = Date.now()
-      const verify = await verifyPageLoaded(page, targetPath)
-
-      metrics.add({
-        scenario: `non-chunk-css-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: verify.loaded,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: verify.loaded ? end - start : 0,
-        pageLoaded: verify.loaded,
-        errorMessage: verify.loaded ? null : `${navResult} | ${verify.reason}`,
-      })
-    } catch (error) {
-      const end = Date.now()
-      metrics.add({
-        scenario: `non-chunk-css-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: false,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: end - start,
-        pageLoaded: false,
-        errorMessage: `${navResult} | ${error instanceof Error ? error.message : String(error)}`,
-      })
-    }
+    metrics.add({
+      scenario: `non-chunk-css-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
+      success: result.loaded,
+      navigationStartTime: start,
+      navigationEndTime: Date.now(),
+      recoveryTimeMs: result.loaded ? result.timeMs : 0,
+      pageLoaded: result.loaded,
+      errorMessage: result.loaded ? null : `${navResult} | ${result.reason}`,
+    })
 
     await cssSimulator.stop()
     await page.close()
@@ -430,33 +349,17 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     await simulator.start()
 
     const navResult = await spaNavigate(page, targetPath)
+    const result = await waitForPageLoad(page, targetPath, 20000)
 
-    try {
-      await page.waitForURL(`**${targetPath.replace(/\.html$/, '').replace(/\/$/, '')}**`, { timeout: 20000 })
-      const end = Date.now()
-      const verify = await verifyPageLoaded(page, targetPath)
-
-      metrics.add({
-        scenario: `intermittent-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: verify.loaded,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: verify.loaded ? end - start : 0,
-        pageLoaded: verify.loaded,
-        errorMessage: verify.loaded ? null : `${navResult} | ${verify.reason}`,
-      })
-    } catch (error) {
-      const end = Date.now()
-      metrics.add({
-        scenario: `intermittent-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: false,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: end - start,
-        pageLoaded: false,
-        errorMessage: `${navResult} | ${error instanceof Error ? error.message : String(error)}`,
-      })
-    }
+    metrics.add({
+      scenario: `intermittent-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
+      success: result.loaded,
+      navigationStartTime: start,
+      navigationEndTime: Date.now(),
+      recoveryTimeMs: result.loaded ? result.timeMs : 0,
+      pageLoaded: result.loaded,
+      errorMessage: result.loaded ? null : `${navResult} | ${result.reason}`,
+    })
 
     await simulator.stop()
     console.log(metrics.formatReport())
@@ -486,32 +389,17 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     await page.waitForTimeout(100)
     await spaNavigate(page, secondPath)
 
-    try {
-      await page.waitForURL(`**${secondPath.replace(/\.html$/, '').replace(/\/$/, '')}**`, { timeout: 20000 })
-      const end = Date.now()
-      const verify = await verifyPageLoaded(page, secondPath)
+    const result = await waitForPageLoad(page, secondPath, 20000)
 
-      metrics.add({
-        scenario: `rapid-back-to-back-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: verify.loaded,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: verify.loaded ? end - start : 0,
-        pageLoaded: verify.loaded,
-        errorMessage: verify.loaded ? null : `Final page not loaded`,
-      })
-    } catch (error) {
-      const end = Date.now()
-      metrics.add({
-        scenario: `rapid-back-to-back-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: false,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: end - start,
-        pageLoaded: false,
-        errorMessage: `Error: ${error instanceof Error ? error.message : String(error)}`,
-      })
-    }
+    metrics.add({
+      scenario: `rapid-back-to-back-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
+      success: result.loaded,
+      navigationStartTime: start,
+      navigationEndTime: Date.now(),
+      recoveryTimeMs: result.loaded ? result.timeMs : 0,
+      pageLoaded: result.loaded,
+      errorMessage: result.loaded ? null : `Final page not loaded`,
+    })
 
     await simulator.stop()
     console.log(metrics.formatReport())
@@ -533,56 +421,9 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     await simulator.start()
 
     await spaNavigate(page, targetPath)
+    const result1 = await waitForPageLoad(page, targetPath, 15000)
 
-    try {
-      await page.waitForURL(`**${targetPath.replace(/\.html$/, '').replace(/\/$/, '')}**`, { timeout: 15000 })
-      const verify1 = await verifyPageLoaded(page, targetPath)
-      if (!verify1.loaded) {
-        metrics.add({
-          scenario: `recovery-then-home-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-          success: false,
-          navigationStartTime: Date.now(),
-          navigationEndTime: Date.now(),
-          recoveryTimeMs: 0,
-          pageLoaded: false,
-          errorMessage: `First navigation failed`,
-        })
-        await simulator.stop()
-        console.log(metrics.formatReport())
-        return
-      }
-
-      await simulator.stop()
-
-      const start = Date.now()
-      await spaNavigate(page, '/')
-
-      try {
-        await page.waitForURL('**/**', { timeout: 10000 })
-        const end = Date.now()
-        const verify2 = await verifyPageLoaded(page, '/')
-
-        metrics.add({
-          scenario: `recovery-then-home-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-          success: verify2.loaded,
-          navigationStartTime: start,
-          navigationEndTime: end,
-          recoveryTimeMs: end - start,
-          pageLoaded: verify2.loaded,
-          errorMessage: verify2.loaded ? null : 'Home page not loaded after recovery',
-        })
-      } catch (error) {
-        metrics.add({
-          scenario: `recovery-then-home-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-          success: false,
-          navigationStartTime: start,
-          navigationEndTime: Date.now(),
-          recoveryTimeMs: 0,
-          pageLoaded: false,
-          errorMessage: `Home navigation error: ${error instanceof Error ? error.message : String(error)}`,
-        })
-      }
-    } catch (error) {
+    if (!result1.loaded) {
       metrics.add({
         scenario: `recovery-then-home-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
         success: false,
@@ -590,9 +431,28 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
         navigationEndTime: Date.now(),
         recoveryTimeMs: 0,
         pageLoaded: false,
-        errorMessage: `First navigation error: ${error instanceof Error ? error.message : String(error)}`,
+        errorMessage: `First navigation failed`,
       })
+      await simulator.stop()
+      console.log(metrics.formatReport())
+      return
     }
+
+    await simulator.stop()
+
+    const start = Date.now()
+    await spaNavigate(page, '/')
+    const result2 = await waitForPageLoad(page, '/', 10000)
+
+    metrics.add({
+      scenario: `recovery-then-home-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
+      success: result2.loaded,
+      navigationStartTime: start,
+      navigationEndTime: Date.now(),
+      recoveryTimeMs: result2.loaded ? result2.timeMs : 0,
+      pageLoaded: result2.loaded,
+      errorMessage: result2.loaded ? null : 'Home page not loaded after recovery',
+    })
 
     console.log(metrics.formatReport())
 
@@ -635,33 +495,17 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     await simulator.start()
 
     const navResult = await spaNavigate(page, targetPath)
+    const result = await waitForPageLoad(page, targetPath, 25000)
 
-    try {
-      await page.waitForURL(`**${targetPath.replace(/\.html$/, '').replace(/\/$/, '')}**`, { timeout: 25000 })
-      const end = Date.now()
-      const verify = await verifyPageLoaded(page, targetPath)
-
-      metrics.add({
-        scenario: `delayed-failure-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: verify.loaded,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: verify.loaded ? end - start : 0,
-        pageLoaded: verify.loaded,
-        errorMessage: verify.loaded ? null : `${navResult} | ${verify.reason}`,
-      })
-    } catch (error) {
-      const end = Date.now()
-      metrics.add({
-        scenario: `delayed-failure-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-        success: false,
-        navigationStartTime: start,
-        navigationEndTime: end,
-        recoveryTimeMs: end - start,
-        pageLoaded: false,
-        errorMessage: `${navResult} | ${error instanceof Error ? error.message : String(error)}`,
-      })
-    }
+    metrics.add({
+      scenario: `delayed-failure-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
+      success: result.loaded,
+      navigationStartTime: start,
+      navigationEndTime: Date.now(),
+      recoveryTimeMs: result.loaded ? result.timeMs : 0,
+      pageLoaded: result.loaded,
+      errorMessage: result.loaded ? null : `${navResult} | ${result.reason}`,
+    })
 
     await simulator.stop()
     console.log(metrics.formatReport())
@@ -682,20 +526,16 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     await simulator.start()
 
     const navResult = await spaNavigate(page, targetPath)
-
-    await page.waitForTimeout(10000)
-
-    const verify = await verifyPageLoaded(page, targetPath)
-    const end = Date.now()
+    const result = await waitForPageLoad(page, targetPath, 10000)
 
     metrics.add({
       scenario: `exceed-max-retries-${PLUGIN_ENABLED ? 'with-plugin' : 'no-plugin'}`,
-      success: verify.loaded,
+      success: result.loaded,
       navigationStartTime: start,
-      navigationEndTime: end,
-      recoveryTimeMs: verify.loaded ? end - start : 0,
-      pageLoaded: verify.loaded,
-      errorMessage: verify.loaded ? null : `Expected fallback after max retries | ${navResult} | ${verify.reason}`,
+      navigationEndTime: Date.now(),
+      recoveryTimeMs: result.loaded ? result.timeMs : 0,
+      pageLoaded: result.loaded,
+      errorMessage: result.loaded ? null : `Expected fallback after max retries | ${navResult} | ${result.reason}`,
     })
 
     await simulator.stop()
@@ -704,7 +544,7 @@ test.describe(`${PLUGIN_ENABLED ? 'WITH' : 'WITHOUT'} plugin: SPA navigation chu
     if (PLUGIN_ENABLED) {
       const currentUrl = page.url()
       const navigatedAway = currentUrl.includes(targetPath.replace('.html', '').replace(/\/$/, ''))
-      expect(navigatedAway || verify.loaded).toBe(true)
+      expect(navigatedAway || result.loaded).toBe(true)
     } else {
       expect(metrics.getSummary().failureCount).toBeGreaterThan(0)
     }

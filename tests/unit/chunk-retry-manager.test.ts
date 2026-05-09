@@ -324,7 +324,8 @@ describe('ChunkRetryManager', () => {
       ;(manager as any).prefetchUrl = 'https://example.com/assets/page.js'
 
       const to = createMockLocation('/test/')
-      await (manager as any).recoverWithCacheBusting('https://example.com/assets/page.js', to)
+      const gen = (manager as any).recoveryGeneration
+      await (manager as any).recoverWithCacheBusting('https://example.com/assets/page.js', to, gen)
 
       expect(router.removeRoute).toHaveBeenCalled()
       expect(router.addRoute).toHaveBeenCalled()
@@ -336,11 +337,187 @@ describe('ChunkRetryManager', () => {
       ;(manager as any).prefetchUrl = 'https://example.com/assets/page.js'
 
       const to = createMockLocation('/test/')
+      const gen = (manager as any).recoveryGeneration
       try {
-        await (manager as any).recoverWithCacheBusting('https://example.com/assets/page.js', to)
+        await (manager as any).recoverWithCacheBusting('https://example.com/assets/page.js', to, gen)
       } catch {
         // Expected to fail in test environment
       }
+    })
+  })
+
+  describe('phantom failure detection', () => {
+    it('retries navigation when URL is already recovered', () => {
+      manager.init()
+      ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
+
+      const onErrorFn = router._guards.onError[0]
+      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
+
+      expect(router.push).toHaveBeenCalledWith('/test/')
+      expect((manager as any).isRecovering).toBe(false)
+      expect((manager as any).phantomRetryCount).toBe(1)
+    })
+
+    it('falls back after 3 phantom retries', () => {
+      manager.init()
+      ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
+      ;(manager as any).phantomRetryCount = 3
+
+      const originalLocation = window.location
+      Object.defineProperty(window, 'location', { value: { href: '', pathname: '/', search: '' }, writable: true, configurable: true })
+
+      const onErrorFn = router._guards.onError[0]
+      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
+
+      expect(window.location.href).toBe('/test/')
+
+      Object.defineProperty(window, 'location', { value: originalLocation, writable: true, configurable: true })
+    })
+
+    it('does not enter full recovery for phantom failures', () => {
+      manager.init()
+      ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
+
+      const onErrorFn = router._guards.onError[0]
+      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
+
+      expect((manager as any).isRecovering).toBe(false)
+      expect(sessionStorage.getItem('test-retry')).toBeNull()
+    })
+
+    it('does not trigger phantom path for non-recovered URLs', () => {
+      manager.init()
+      const onErrorFn = router._guards.onError[0]
+      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
+
+      expect((manager as any).isRecovering).toBe(true)
+      expect((manager as any).phantomRetryCount).toBe(0)
+    })
+  })
+
+  describe('recoveredModules', () => {
+    it('stores module in recoveredModules when prefetch succeeds', async () => {
+      manager.init()
+      ;(manager as any).prefetchPromise = Promise.resolve({ default: { name: 'TestComponent' } })
+      ;(manager as any).prefetchUrl = 'https://example.com/assets/page.js'
+
+      const to = createMockLocation('/test/')
+      const gen = (manager as any).recoveryGeneration
+      await (manager as any).recoverWithCacheBusting('https://example.com/assets/page.js', to, gen)
+
+      expect((manager as any).recoveredModules.has('https://example.com/assets/page.js')).toBe(true)
+    })
+
+    it('clears recoveredModules in afterEach', () => {
+      manager.init()
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
+      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
+      expect((manager as any).recoveredModules.size).toBe(0)
+    })
+
+    it('handlePreloadError skips prefetch for already recovered URLs', () => {
+      manager.init()
+      ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
+
+      const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
+      window.dispatchEvent(event)
+
+      expect((manager as any).prefetchUrl).toBeNull()
+      expect((manager as any).prefetchPromise).toBeNull()
+    })
+  })
+
+  describe('updateRouteAndRetry component pattern', () => {
+    it('uses Promise.resolve wrapper for component', async () => {
+      manager.init()
+      const mockModule = { default: { name: 'TestComponent', template: '<div>test</div>' } }
+
+      await (manager as any).updateRouteAndRetry(createMockLocation('/test/'), mockModule)
+
+      expect(router.addRoute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          component: expect.any(Function),
+        })
+      )
+
+      const addRouteCall = (router.addRoute as any).mock.calls[0][0]
+      const componentFn = addRouteCall.component
+      const result = componentFn()
+      expect(result).toBeInstanceOf(Promise)
+      const resolved = await result
+      expect(resolved).toBe(mockModule)
+    })
+
+    it('resets phantomRetryCount in updateRouteAndRetry', async () => {
+      manager.init()
+      ;(manager as any).phantomRetryCount = 2
+
+      const mockModule = { default: { name: 'TestComponent' } }
+      await (manager as any).updateRouteAndRetry(createMockLocation('/test/'), mockModule)
+
+      expect((manager as any).phantomRetryCount).toBe(0)
+    })
+  })
+
+  describe('recovery generation and target', () => {
+    it('cancels stale recovery when new route error arrives', () => {
+      manager.init()
+      ;(manager as any).isRecovering = true
+      ;(manager as any).recoveryTarget = createMockLocation('/old-page/')
+      ;(manager as any).pendingRecovery = Promise.resolve()
+
+      const onErrorFn = router._guards.onError[0]
+      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/new-page.js'), createMockLocation('/new-page/'), createMockLocation('/'))
+
+      expect((manager as any).isRecovering).toBe(true)
+      expect((manager as any).recoveryTarget?.fullPath).toBe('/new-page/')
+      expect((manager as any).retryCount).toBe(0)
+    })
+
+    it('keeps current recovery when same route error arrives', () => {
+      manager.init()
+      ;(manager as any).isRecovering = true
+      ;(manager as any).recoveryTarget = createMockLocation('/test/')
+      ;(manager as any).pendingRecovery = Promise.resolve()
+
+      const onErrorFn = router._guards.onError[0]
+      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
+
+      expect((manager as any).recoveryTarget?.fullPath).toBe('/test/')
+    })
+
+    it('increments recoveryGeneration on new recovery', () => {
+      manager.init()
+      const initialGen = (manager as any).recoveryGeneration
+
+      const onErrorFn = router._guards.onError[0]
+      onErrorFn(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'), createMockLocation('/test/'), createMockLocation('/'))
+
+      expect((manager as any).recoveryGeneration).toBe(initialGen + 1)
+    })
+
+    it('stale recovery is skipped when generation mismatches', async () => {
+      manager.init()
+      const mockModule = { default: { name: 'TestComponent' } }
+      ;(manager as any).prefetchPromise = Promise.resolve(mockModule)
+      ;(manager as any).prefetchUrl = 'https://example.com/assets/page.js'
+
+      const to = createMockLocation('/test/')
+      const staleGeneration = (manager as any).recoveryGeneration
+      ;(manager as any).recoveryGeneration = staleGeneration + 100
+
+      await (manager as any).recoverWithCacheBusting('https://example.com/assets/page.js', to, staleGeneration)
+
+      expect(router.removeRoute).not.toHaveBeenCalled()
+    })
+
+    it('clears recoveryTarget in afterEach', () => {
+      manager.init()
+      ;(manager as any).recoveryTarget = createMockLocation('/test/')
+      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
+      expect((manager as any).recoveryTarget).toBeNull()
     })
   })
 })
