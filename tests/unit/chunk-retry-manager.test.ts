@@ -405,4 +405,129 @@ describe('ChunkRetryManager', () => {
       expect(router.removeRoute).not.toHaveBeenCalled()
     })
   })
+
+  describe('ToastUI aggregation', () => {
+    let toastRouter: ReturnType<typeof createMockRouter>
+    let toastManager: ChunkRetryManager
+
+    beforeEach(() => {
+      toastRouter = createMockRouter()
+      toastManager = new ChunkRetryManager(toastRouter as any, { maxRetries: 3, retryDelay: 100, retryKey: 'toast-test', showToast: true })
+      sessionStorage.clear()
+      document.body.innerHTML = ''
+      document.head.innerHTML = ''
+    })
+
+    afterEach(() => {
+      toastManager.destroy()
+      document.body.innerHTML = ''
+      document.head.innerHTML = ''
+    })
+
+    it('creates toast container on init', () => {
+      toastManager.init()
+      expect(document.querySelector('#chunk-retry-toast-container')).not.toBeNull()
+    })
+
+    it('creates toast styles on init', () => {
+      toastManager.init()
+      expect(document.querySelector('#chunk-retry-toast-styles')).not.toBeNull()
+    })
+
+    it('aggregates same-type toasts with count badge', () => {
+      toastManager.init()
+
+      ;(toastManager as any).toast.show('detect', '第一次', 'url1')
+      ;(toastManager as any).toast.show('detect', '第二次', 'url2')
+
+      const toasts = document.querySelectorAll('.chunk-retry-toast--detect')
+      expect(toasts.length).toBe(1)
+
+      const badge = toasts[0].querySelector('.chunk-retry-toast__badge')
+      expect(badge).not.toBeNull()
+      expect(badge?.textContent).toBe('2')
+    })
+
+    it('does not show badge when count is 1', () => {
+      toastManager.init()
+
+      ;(toastManager as any).toast.show('detect', '检测', 'url1')
+
+      const toasts = document.querySelectorAll('.chunk-retry-toast--detect')
+      expect(toasts.length).toBe(1)
+
+      const badge = toasts[0].querySelector('.chunk-retry-toast__badge')
+      expect(badge).toBeNull()
+    })
+
+    it('keeps different types as separate toasts', () => {
+      toastManager.init()
+
+      ;(toastManager as any).toast.show('detect', '检测', 'url1')
+      ;(toastManager as any).toast.show('retrying', '恢复中', 'url1')
+
+      const allToasts = document.querySelectorAll('.chunk-retry-toast')
+      expect(allToasts.length).toBe(2)
+    })
+
+    it('updates message on aggregated toast', () => {
+      toastManager.init()
+
+      ;(toastManager as any).toast.show('detect', '第一次', 'url1')
+      ;(toastManager as any).toast.show('detect', '第二次', 'url2')
+
+      const toasts = document.querySelectorAll('.chunk-retry-toast--detect')
+      expect(toasts.length).toBe(1)
+      expect(toasts[0].textContent).toContain('第二次')
+    })
+
+    it('adds pulse animation on update', () => {
+      toastManager.init()
+
+      ;(toastManager as any).toast.show('detect', '第一次', 'url1')
+      ;(toastManager as any).toast.show('detect', '第二次', 'url2')
+
+      const toast = document.querySelector('.chunk-retry-toast--detect')
+      expect(toast?.classList.contains('chunk-retry-toast--pulse')).toBe(true)
+    })
+
+    it('dismissAll clears all toasts', async () => {
+      toastManager.init()
+
+      ;(toastManager as any).toast.show('detect', '检测', 'url1')
+      ;(toastManager as any).toast.show('retrying', '恢复中', 'url1')
+
+      const beforeCount = document.querySelectorAll('.chunk-retry-toast').length
+      expect(beforeCount).toBe(2)
+
+      ;(toastManager as any).toast.dismissAll()
+
+      await new Promise(resolve => setTimeout(resolve, 350))
+
+      const activeToasts = (toastManager as any).toast.activeToasts
+      expect(activeToasts.size).toBe(0)
+    })
+
+    it('dismissAll is called in afterEach', async () => {
+      toastManager.init()
+
+      ;(toastManager as any).toast.show('detect', '检测', 'url1')
+
+      toastRouter._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
+
+      await new Promise(resolve => setTimeout(resolve, 350))
+
+      const activeToasts = (toastManager as any).toast.activeToasts
+      expect(activeToasts.size).toBe(0)
+    })
+
+    it('has close button', () => {
+      toastManager.init()
+
+      ;(toastManager as any).toast.show('detect', '检测', 'url1')
+
+      const closeBtn = document.querySelector('.chunk-retry-toast__close')
+      expect(closeBtn).not.toBeNull()
+    })
+  })
 })
