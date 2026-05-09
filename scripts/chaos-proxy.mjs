@@ -164,6 +164,14 @@ const proxy = httpProxy.createProxyServer({
   selfHandleResponse: true,
 })
 
+proxy.on('proxyReq', (proxyReq, req) => {
+  const contentType = req.headers['accept'] || ''
+  if (contentType.includes('text/html')) {
+    proxyReq.removeHeader('accept-encoding')
+    proxyReq.setHeader('accept-encoding', 'identity')
+  }
+})
+
 proxy.on('error', (err, req, res) => {
   if (res && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/plain' })
@@ -174,9 +182,19 @@ proxy.on('error', (err, req, res) => {
 })
 
 const INJECT_MARKER = '</body>'
-const INJECT_SCRIPT = `<script>${CHAOS_INJECT_SCRIPT()}</script></body>`
+const INJECT_SCRIPT = `<script>document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.src='/__chaos__/panel.js';document.head.appendChild(s)});</script></body>`
 
 const server = http.createServer((req, res) => {
+  if (req.url === '/__chaos__/panel.js') {
+    res.writeHead(200, {
+      'Content-Type': 'application/javascript',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-cache',
+    })
+    res.end(CHAOS_INJECT_SCRIPT())
+    return
+  }
+
   if (req.url.startsWith('/__chaos__/api/')) {
     if (req.url === '/__chaos__/api/config') {
       serveJson(res, config)
