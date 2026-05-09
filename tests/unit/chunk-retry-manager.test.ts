@@ -272,6 +272,37 @@ describe('ChunkRetryManager', () => {
     })
   })
 
+  describe('beforeEach route loader patching', () => {
+    it('patches route loader in beforeEach when pathModules has entry', () => {
+      manager.init()
+      const mockModule = { default: { name: 'TestComponent' } }
+      ;(manager as any).pathModules.set('/test/', mockModule)
+      const mockRoutes = {
+        '/test/': { loader: () => Promise.resolve({ old: true }) }
+      }
+      ;(manager as any).routes = mockRoutes
+
+      const to = createMockLocation('/test/')
+      router._guards.beforeEach[0](to, createMockLocation('/'))
+
+      expect(mockRoutes['/test/'].loader()).resolves.toBe(mockModule)
+      expect((manager as any).pendingLoaderRestore).toBeTruthy()
+    })
+
+    it('does not patch when pathModules has no entry', () => {
+      manager.init()
+      const mockRoutes = {
+        '/test/': { loader: () => Promise.resolve({ old: true }) }
+      }
+      ;(manager as any).routes = mockRoutes
+
+      const to = createMockLocation('/test/')
+      router._guards.beforeEach[0](to, createMockLocation('/'))
+
+      expect((manager as any).pendingLoaderRestore).toBeNull()
+    })
+  })
+
   describe('afterEach loader restore', () => {
     it('restores original route loader in afterEach', () => {
       manager.init()
@@ -289,59 +320,16 @@ describe('ChunkRetryManager', () => {
     })
   })
 
-  describe('applyRecoveredModule', () => {
-    it('sets _pageChunk on current route when path matches', async () => {
+  describe('isApplyingModule guard', () => {
+    it('router.onError is ignored when isApplyingModule is true', () => {
       manager.init()
-      const mockModule = { default: { name: 'TestComponent' } }
-      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', mockModule)
-      router._setCurrentRoute(createMockLocation('/test/'))
-      const to = createMockLocation('/test/')
+      ;(manager as any).isApplyingModule = true
 
-      await (manager as any).applyRecoveredModule('https://example.com/assets/page.js', to)
+      const onErrorFn = router._guards.onError[0]
+      const error = new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js')
+      onErrorFn(error, createMockLocation('/test/'), createMockLocation('/'))
 
-      expect(router.currentRoute.value.meta._pageChunk).toBe(mockModule)
-    })
-
-    it('does nothing if module not found', async () => {
-      manager.init()
-      router._setCurrentRoute(createMockLocation('/test/'))
-      const to = createMockLocation('/test/')
-
-      await (manager as any).applyRecoveredModule('https://example.com/assets/nonexistent.js', to)
-
-      expect(router.currentRoute.value.meta._pageChunk).toBeUndefined()
-    })
-
-    it('patches route loader and calls router.replace when path differs', async () => {
-      manager.init()
-      const mockModule = { default: { name: 'TestComponent' } }
-      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', mockModule)
-      router._setCurrentRoute(createMockLocation('/test/'))
-      const to = createMockLocation('/other-page/')
-      const mockRoutes = {
-        '/other-page/': { loader: () => Promise.resolve({}) }
-      }
-      ;(manager as any).routes = mockRoutes
-
-      await (manager as any).applyRecoveredModule('https://example.com/assets/page.js', to)
-
-      expect(router.replace).toHaveBeenCalledWith('/other-page/')
-      expect((manager as any).pendingLoaderRestore).toBeTruthy()
-      expect((manager as any).pendingLoaderRestore.path).toBe('/other-page/')
-      await expect(mockRoutes['/other-page/'].loader()).resolves.toBe(mockModule)
-    })
-
-    it('falls back when routes not available and path differs', async () => {
-      manager.init()
-      const mockModule = { default: { name: 'TestComponent' } }
-      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', mockModule)
-      router._setCurrentRoute(createMockLocation('/test/'))
-      const to = createMockLocation('/other-page/')
-      ;(manager as any).routes = null
-
-      await (manager as any).applyRecoveredModule('https://example.com/assets/page.js', to)
-
-      expect(router.replace).not.toHaveBeenCalled()
+      expect((manager as any).isRecovering).toBe(false)
     })
   })
 

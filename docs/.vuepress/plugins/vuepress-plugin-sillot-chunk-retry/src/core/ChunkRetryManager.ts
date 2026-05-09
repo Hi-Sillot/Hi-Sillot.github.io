@@ -251,6 +251,7 @@ export class ChunkRetryManager {
   private retryCount = 0
   private isRecovering = false
   private recoveredModules: Map<string, any> = new Map()
+  private pathModules: Map<string, any> = new Map()
   private recoveryGeneration = 0
   private toast: ToastUI
   private preloadErrorHandler: ((ev: Event) => void) | null = null
@@ -258,6 +259,7 @@ export class ChunkRetryManager {
   private unhandledRejectionHandler: ((ev: PromiseRejectionEvent) => void) | null = null
   private routes: Record<string, any> | null = null
   private pendingLoaderRestore: LoaderRestore | null = null
+  private isApplyingModule = false
 
   constructor(router: RouterLike, options: ChunkRetryOptions = {}) {
     this.router = router
@@ -274,6 +276,14 @@ export class ChunkRetryManager {
 
     this.router.beforeEach((to: RouteLocationNormalized) => {
       this.pendingTarget = to
+
+      if (this.pathModules.has(to.path) && this.routes) {
+        const module = this.pathModules.get(to.path)
+        const originalLoader = this.patchRouteLoader(to.path, module)
+        if (originalLoader) {
+          this.pendingLoaderRestore = { path: to.path, originalLoader }
+        }
+      }
     })
 
     this.router.afterEach(() => {
@@ -285,11 +295,13 @@ export class ChunkRetryManager {
       if (this.isRecovering) return
       this.retryCount = 0
       this.recoveredModules.clear()
+      this.pathModules.clear()
       sessionStorage.removeItem(this.options.retryKey)
       this.toast.dismissAll()
     })
 
     this.router.onError((error: Error, to: RouteLocationNormalized) => {
+      if (this.isApplyingModule) return
       if (!isDynamicImportError(error)) return
       const target = this.pendingTarget || to
       this.handleChunkFailure(error, target)
@@ -314,7 +326,7 @@ export class ChunkRetryManager {
         return
       }
 
-      if (this.isRecovering) return
+      if (this.isRecovering || this.isApplyingModule) return
 
       const target = this.pendingTarget || (this.router.currentRoute.value as RouteLocationNormalized)
       this.handleChunkFailure(error, target)
@@ -361,7 +373,15 @@ export class ChunkRetryManager {
     this.toast.show('detect', '资源加载失败', shortUrl)
 
     if (failedUrl && this.recoveredModules.has(failedUrl)) {
-      this.applyRecoveredModule(failedUrl, to)
+      this.pathModules.set(to.path, this.recoveredModules.get(failedUrl))
+      this.isApplyingModule = true
+      this.router.replace(to.fullPath).then(() => {
+        this.isApplyingModule = false
+        this.toast.show('success', '页面恢复成功', to.fullPath)
+      }).catch(() => {
+        this.isApplyingModule = false
+        this.fallbackNavigation(to)
+      })
       return
     }
 
@@ -385,15 +405,22 @@ export class ChunkRetryManager {
 
       const module = await this.retryImportWithCacheBusting(failedUrl)
       this.recoveredModules.set(failedUrl, module)
+      this.pathModules.set(to.path, module)
 
       if (this.recoveryGeneration !== generation) return
-
-      await this.applyRecoveredModule(failedUrl, to)
 
       this.isRecovering = false
       sessionStorage.removeItem(this.options.retryKey)
 
-      this.toast.show('success', '页面恢复成功', to.fullPath)
+      this.isApplyingModule = true
+      try {
+        await this.router.replace(to.fullPath)
+        this.isApplyingModule = false
+        this.toast.show('success', '页面恢复成功', to.fullPath)
+      } catch {
+        this.isApplyingModule = false
+        this.fallbackNavigation(to)
+      }
     } catch {
       if (this.recoveryGeneration !== generation) return
 
@@ -425,51 +452,51 @@ export class ChunkRetryManager {
     })
   }
 
-  private async applyRecoveredModule(failedUrl: string, to: RouteLocationNormalized): Promise<void> {
-    const module = this.recoveredModules.get(failedUrl)
-    if (!module) return
-
-    const current = this.router.currentRoute.value as RouteLocationNormalized
-    if (current.meta && (current.path === to.path || current.fullPath === to.fullPath)) {
-      current.meta._pageChunk = module
-      return
-    }
-
-    const originalLoader = this.patchRouteLoader(to.path, module)
-    if (originalLoader) {
-      this.pendingLoaderRestore = { path: to.path, originalLoader }
-      try {
-        await this.router.replace(to.fullPath)
-      } catch {
-        this.restoreRouteLoader(to.path, originalLoader)
-        this.pendingLoaderRestore = null
-        this.fallbackNavigation(to)
-      }
-    } else {
-      this.fallbackNavigation(to)
-    }
-  }
-
   private patchRouteLoader(path: string, module: any): (() => Promise<any>) | null {
     if (!this.routes) return null
     const routesObj = this.routes.value || this.routes
-    const route = routesObj[path]
-    if (!route || typeof route.loader !== 'function') return null
-    const originalLoader = route.loader
-    route.loader = () => Promise.resolve(module)
-    return originalLoader
+    const candidates = [path, path.replace(/\/$/, ''), path + '/', path.replace(/\.html$/, ''), path + '.html']
+    for (const key of candidates) {
+      const route = routesObj[key]
+      if (route && typeof route.loader === 'function') {
+        const originalLoader = route.loader
+        route.loader = () => Promise.resolve(module)
+        return originalLoader
+      }
+    }
+    for (const [key, route] of Object.entries(routesObj)) {
+      if (typeof route.loader === 'function' && (key === path || path.startsWith(key) || key.startsWith(path))) {
+        const originalLoader = route.loader
+        route.loader = () => Promise.resolve(module)
+        return originalLoader
+      }
+    }
+    return null
   }
 
   private restoreRouteLoader(path: string, originalLoader: () => Promise<any>): void {
     if (!this.routes) return
     const routesObj = this.routes.value || this.routes
-    const route = routesObj[path]
-    if (route) route.loader = originalLoader
+    const candidates = [path, path.replace(/\/$/, ''), path + '/', path.replace(/\.html$/, ''), path + '.html']
+    for (const key of candidates) {
+      const route = routesObj[key]
+      if (route && typeof route.loader === 'function') {
+        route.loader = originalLoader
+        return
+      }
+    }
+    for (const [key, route] of Object.entries(routesObj)) {
+      if (typeof route.loader === 'function' && (key === path || path.startsWith(key) || key.startsWith(path))) {
+        route.loader = originalLoader
+        return
+      }
+    }
   }
 
   private fallbackNavigation(to: RouteLocationNormalized): void {
     this.toast.show('fallback', '回退到整页导航', to.fullPath)
     this.isRecovering = false
+    this.isApplyingModule = false
     sessionStorage.removeItem(this.options.retryKey)
     const target = to.fullPath
     if (location.pathname + location.search !== target) {
