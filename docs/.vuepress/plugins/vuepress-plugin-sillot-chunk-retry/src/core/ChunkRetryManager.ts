@@ -21,26 +21,47 @@ interface ActiveToast {
   dismissTimer: ReturnType<typeof setTimeout> | null
 }
 
+interface PendingToast {
+  type: ToastType
+  message: string
+  detail?: string
+}
+
 class ToastUI {
   private container: HTMLDivElement | null = null
   private enabled: boolean
   private activeToasts: Map<string, ActiveToast> = new Map()
+  private pendingQueue: PendingToast[] = []
 
   constructor(enabled: boolean) {
     this.enabled = enabled
   }
 
   init(): void {
+  }
+
+  initUI(): void {
     if (!this.enabled || typeof document === 'undefined') return
+    if (this.container) return
 
     this.container = document.createElement('div')
     this.container.id = 'chunk-retry-toast-container'
     this.injectStyles()
     document.body.appendChild(this.container)
+
+    for (const item of this.pendingQueue) {
+      this.show(item.type, item.message, item.detail)
+    }
+    this.pendingQueue = []
   }
 
   show(type: ToastType, message: string, detail?: string): void {
-    if (!this.enabled || !this.container) return
+    if (!this.enabled) return
+
+    if (!this.container) {
+      this.pendingQueue.push({ type, message, detail })
+      return
+    }
 
     const key = type
     const existing = this.activeToasts.get(key)
@@ -92,9 +113,24 @@ class ToastUI {
   }
 
   dismissAll(): void {
+    this.pendingQueue = []
     for (const key of this.activeToasts.keys()) {
       this.dismiss(key)
     }
+  }
+
+  destroy(): void {
+    this.pendingQueue = []
+    for (const toast of this.activeToasts.values()) {
+      if (toast.dismissTimer) clearTimeout(toast.dismissTimer)
+    }
+    this.activeToasts.clear()
+    if (this.container) {
+      this.container.remove()
+      this.container = null
+    }
+    const style = document.getElementById('chunk-retry-toast-styles')
+    if (style) style.remove()
   }
 
   private updateToastDom(toast: ActiveToast): void {
@@ -226,17 +262,15 @@ export class ChunkRetryManager {
   init(): void {
     if (typeof window === 'undefined') return
 
-    this.toast.init()
-
     this.router.beforeEach((to: RouteLocationNormalized) => {
       this.pendingTarget = to
+      this.recoveredUrls.clear()
+      this.recoveredModules.clear()
     })
 
     this.router.afterEach(() => {
       this.lastNavigationTime = Date.now()
       this.retryCount = 0
-      this.recoveredUrls.clear()
-      this.recoveredModules.clear()
       sessionStorage.removeItem(this.options.retryKey)
       this.toast.dismissAll()
     })
@@ -255,6 +289,8 @@ export class ChunkRetryManager {
       if (!failedUrl) return
       if (this.recoveredUrls.has(failedUrl) && this.recoveredModules.has(failedUrl)) return
 
+      event.preventDefault()
+
       const target = this.pendingTarget || (this.router.currentRoute.value as RouteLocationNormalized)
       this.handleChunkFailure(error, target)
     }) as (ev: Event) => void
@@ -262,11 +298,16 @@ export class ChunkRetryManager {
     window.addEventListener('vite:preloadError', this.preloadErrorHandler)
   }
 
+  initUI(): void {
+    this.toast.initUI()
+  }
+
   destroy(): void {
     if (this.preloadErrorHandler) {
       window.removeEventListener('vite:preloadError', this.preloadErrorHandler)
       this.preloadErrorHandler = null
     }
+    this.toast.destroy()
   }
 
   private handleChunkFailure(error: Error, to: RouteLocationNormalized): void {

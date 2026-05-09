@@ -644,9 +644,12 @@ function CHAOS_INJECT_SCRIPT() {
       const pr=PR[b.dataset.p];if(!pr)return;
       panel.querySelectorAll('.cp-pbtn').forEach(x=>x.classList.remove('on'));
       b.classList.add('on');
+      try{localStorage.setItem('__chaos_preset',b.dataset.p)}catch(e){}
       if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'config',config:pr}));
     });
   });
+
+  try{var sp=localStorage.getItem('__chaos_preset');if(sp){var sb=panel.querySelector('.cp-pbtn[data-p="'+sp+'"]');if(sb)sb.classList.add('on')}}catch(e){}
 
   cWs();
   })();`

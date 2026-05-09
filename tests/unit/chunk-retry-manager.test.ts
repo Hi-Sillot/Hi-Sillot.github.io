@@ -100,15 +100,6 @@ describe('ChunkRetryManager', () => {
       expect(sessionStorage.getItem('test-retry')).toBeNull()
     })
 
-    it('clears recoveredUrls and recoveredModules in afterEach', () => {
-      manager.init()
-      ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
-      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
-      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
-      expect((manager as any).recoveredUrls.size).toBe(0)
-      expect((manager as any).recoveredModules.size).toBe(0)
-    })
-
     it('records lastNavigationTime in afterEach', () => {
       manager.init()
       const before = Date.now()
@@ -125,6 +116,15 @@ describe('ChunkRetryManager', () => {
       const target = createMockLocation('/other-page/', 'other-page')
       router._guards.beforeEach[0](target, createMockLocation('/test/'))
       expect((manager as any).pendingTarget).toBe(target)
+    })
+
+    it('clears recoveredUrls and recoveredModules in beforeEach', () => {
+      manager.init()
+      ;(manager as any).recoveredUrls.add('https://example.com/assets/page.js')
+      ;(manager as any).recoveredModules.set('https://example.com/assets/page.js', { default: {} })
+      router._guards.beforeEach[0](createMockLocation('/test/'), createMockLocation('/'))
+      expect((manager as any).recoveredUrls.size).toBe(0)
+      expect((manager as any).recoveredModules.size).toBe(0)
     })
 
     it('uses pendingTarget in vite:preloadError handler', () => {
@@ -205,11 +205,11 @@ describe('ChunkRetryManager', () => {
       expect(sessionStorage.getItem('test-retry')).not.toBeNull()
     })
 
-    it('does NOT call event.preventDefault', () => {
+    it('calls event.preventDefault to suppress Vite re-throw', () => {
       manager.init()
       const event = createMockPreloadEvent(new Error('Failed to fetch dynamically imported module: https://example.com/assets/page.js'))
       window.dispatchEvent(event)
-      expect(event.defaultPrevented).toBe(false)
+      expect(event.defaultPrevented).toBe(true)
     })
 
     it('ignores preloadError without payload', () => {
@@ -424,18 +424,39 @@ describe('ChunkRetryManager', () => {
       document.head.innerHTML = ''
     })
 
-    it('creates toast container on init', () => {
+    it('creates toast container on initUI', () => {
       toastManager.init()
+      toastManager.initUI()
       expect(document.querySelector('#chunk-retry-toast-container')).not.toBeNull()
     })
 
-    it('creates toast styles on init', () => {
+    it('creates toast styles on initUI', () => {
       toastManager.init()
+      toastManager.initUI()
       expect(document.querySelector('#chunk-retry-toast-styles')).not.toBeNull()
+    })
+
+    it('does not create toast container on init alone', () => {
+      toastManager.init()
+      expect(document.querySelector('#chunk-retry-toast-container')).toBeNull()
+    })
+
+    it('queues toasts before initUI and flushes after', () => {
+      toastManager.init()
+
+      ;(toastManager as any).toast.show('detect', '排队消息', 'url1')
+      expect(document.querySelectorAll('.chunk-retry-toast').length).toBe(0)
+
+      toastManager.initUI()
+
+      const toasts = document.querySelectorAll('.chunk-retry-toast--detect')
+      expect(toasts.length).toBe(1)
+      expect(toasts[0].textContent).toContain('排队消息')
     })
 
     it('aggregates same-type toasts with count badge', () => {
       toastManager.init()
+      toastManager.initUI()
 
       ;(toastManager as any).toast.show('detect', '第一次', 'url1')
       ;(toastManager as any).toast.show('detect', '第二次', 'url2')
@@ -450,6 +471,7 @@ describe('ChunkRetryManager', () => {
 
     it('does not show badge when count is 1', () => {
       toastManager.init()
+      toastManager.initUI()
 
       ;(toastManager as any).toast.show('detect', '检测', 'url1')
 
@@ -462,6 +484,7 @@ describe('ChunkRetryManager', () => {
 
     it('keeps different types as separate toasts', () => {
       toastManager.init()
+      toastManager.initUI()
 
       ;(toastManager as any).toast.show('detect', '检测', 'url1')
       ;(toastManager as any).toast.show('retrying', '恢复中', 'url1')
@@ -472,6 +495,7 @@ describe('ChunkRetryManager', () => {
 
     it('updates message on aggregated toast', () => {
       toastManager.init()
+      toastManager.initUI()
 
       ;(toastManager as any).toast.show('detect', '第一次', 'url1')
       ;(toastManager as any).toast.show('detect', '第二次', 'url2')
@@ -483,6 +507,7 @@ describe('ChunkRetryManager', () => {
 
     it('adds pulse animation on update', () => {
       toastManager.init()
+      toastManager.initUI()
 
       ;(toastManager as any).toast.show('detect', '第一次', 'url1')
       ;(toastManager as any).toast.show('detect', '第二次', 'url2')
@@ -493,6 +518,7 @@ describe('ChunkRetryManager', () => {
 
     it('dismissAll clears all toasts', async () => {
       toastManager.init()
+      toastManager.initUI()
 
       ;(toastManager as any).toast.show('detect', '检测', 'url1')
       ;(toastManager as any).toast.show('retrying', '恢复中', 'url1')
@@ -510,6 +536,7 @@ describe('ChunkRetryManager', () => {
 
     it('dismissAll is called in afterEach', async () => {
       toastManager.init()
+      toastManager.initUI()
 
       ;(toastManager as any).toast.show('detect', '检测', 'url1')
 
@@ -523,6 +550,7 @@ describe('ChunkRetryManager', () => {
 
     it('has close button', () => {
       toastManager.init()
+      toastManager.initUI()
 
       ;(toastManager as any).toast.show('detect', '检测', 'url1')
 
