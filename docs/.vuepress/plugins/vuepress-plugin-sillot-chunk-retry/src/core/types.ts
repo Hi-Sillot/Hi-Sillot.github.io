@@ -27,4 +27,5 @@ export interface ChunkRetryOptions {
   maxRetries?: number
   retryDelay?: number
   retryKey?: string
+  showToast?: boolean
 }

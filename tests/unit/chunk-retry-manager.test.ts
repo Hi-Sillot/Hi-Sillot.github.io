@@ -43,7 +43,7 @@ describe('ChunkRetryManager', () => {
 
   beforeEach(() => {
     router = createMockRouter()
-    manager = new ChunkRetryManager(router as any, { maxRetries: 3, retryDelay: 100, retryKey: 'test-retry' })
+    manager = new ChunkRetryManager(router as any, { maxRetries: 3, retryDelay: 100, retryKey: 'test-retry', showToast: false })
     sessionStorage.clear()
   })
 
