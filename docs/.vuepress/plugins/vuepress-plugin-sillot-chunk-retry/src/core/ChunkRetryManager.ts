@@ -65,11 +65,11 @@ class StatusIndicator {
     const style = document.createElement('style')
     style.id = 'chunk-retry-status-styles'
     style.textContent = `
-#chunk-retry-status{position:fixed;top:0;left:0;height:2px;z-index:9999999;pointer-events:none;transition:opacity .5s ease}
-#chunk-retry-status.recovering{background:#58a6ff;animation:chunk-retry-progress 3s ease-in-out infinite}
-#chunk-retry-status.success{background:#3fb950;width:100%;animation:none}
-#chunk-retry-status.fail{background:#f85149;width:100%;animation:none}
-@keyframes chunk-retry-progress{0%{width:0}50%{width:70%}100%{width:95%}}
+#chunk-retry-status{position:fixed;top:var(--vp-nav-height,64px);left:0;width:100%;height:3px;z-index:9999999;pointer-events:none;opacity:0;transition:opacity .4s ease,background .4s ease}
+#chunk-retry-status.recovering{opacity:1;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.6);animation:chunk-retry-pulse 1.5s ease-in-out infinite}
+#chunk-retry-status.success{opacity:1;background:#3fb950;box-shadow:0 0 8px rgba(63,185,80,.5);animation:none}
+#chunk-retry-status.fail{opacity:1;background:#f85149;box-shadow:0 0 8px rgba(248,81,73,.5);animation:none}
+@keyframes chunk-retry-pulse{0%,100%{opacity:1}50%{opacity:.5}}
 `
     document.head.appendChild(style)
   }
