@@ -182,6 +182,7 @@ function isFlakyDownPeriod() {
 const versionUpdateFailedUrls = new Set()
 
 let appReady = false
+let lastHtmlNavTime = 0
 
 const proxy = httpProxy.createProxyServer({
   target: target.href,
@@ -247,8 +248,13 @@ const server = http.createServer((req, res) => {
   const isCacheBust = new URL(reqUrl, 'http://dummy').searchParams.has('t') || new URL(reqUrl, 'http://dummy').searchParams.has('_retry')
   const startTime = Date.now()
   const accept = req.headers['accept'] || ''
+  const secFetchDest = req.headers['sec-fetch-dest'] || ''
+  const secFetchMode = req.headers['sec-fetch-mode'] || ''
 
-  if (accept.includes('text/html')) {
+  const isPageNavigation = accept.includes('text/html') &&
+    (secFetchDest === 'document' || secFetchMode === 'navigate' || (!secFetchDest && !secFetchMode))
+
+  if (isPageNavigation) {
     appReady = false
   }
 
@@ -387,8 +393,14 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
   const isCacheBust = new URL(reqUrl, 'http://dummy').searchParams.has('t') || new URL(reqUrl, 'http://dummy').searchParams.has('_retry')
   const contentType = proxyRes.headers['content-type'] || ''
   const startTime = req._chaosStartTime || Date.now()
+  const accept = req.headers['accept'] || ''
+  const secFetchDest = req.headers['sec-fetch-dest'] || ''
+  const secFetchMode = req.headers['sec-fetch-mode'] || ''
 
-  if (contentType.includes('text/html')) {
+  const isPageNavigation = accept.includes('text/html') &&
+    (secFetchDest === 'document' || secFetchMode === 'navigate' || (!secFetchDest && !secFetchMode))
+
+  if (contentType.includes('text/html') && isPageNavigation) {
     injectChaosPanel(proxyRes, res)
     return
   }
