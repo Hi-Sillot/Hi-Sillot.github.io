@@ -1,8 +1,7 @@
 import { spawn } from 'node:child_process'
-import http from 'node:http'
 
-const DEV_PORT = 5860
-const CHAOS_PORT = 5861
+const APP_PORT = 5858
+const CHAOS_PORT = 5860
 
 function startProcess(cmd, args, label, color) {
   const proc = spawn(cmd, args, {
@@ -37,13 +36,13 @@ async function main() {
   console.log(`  模式: ${mode}`)
   console.log('')
 
-  let vuepressProc, chaosProc
+  let appProc, chaosProc
 
   if (mode === 'dev') {
-    console.log(`  启动 VuePress dev server (port ${DEV_PORT})...`)
-    vuepressProc = startProcess(
+    console.log(`  启动 VuePress dev server (port ${APP_PORT})...`)
+    appProc = startProcess(
       'npx',
-      ['vuepress', 'dev', 'docs', '--port', String(DEV_PORT), '--no-open'],
+      ['vuepress', 'dev', 'docs', '--port', String(APP_PORT), '--no-open'],
       'dev',
       '36',
     )
@@ -53,36 +52,36 @@ async function main() {
       const check = (data) => {
         if (!resolved && data.toString().includes('dev server running')) {
           resolved = true
-          vuepressProc.stdout.removeListener('data', check)
+          appProc.stdout.removeListener('data', check)
           setTimeout(resolve, 1000)
         }
       }
-      vuepressProc.stdout.on('data', check)
+      appProc.stdout.on('data', check)
       setTimeout(() => { if (!resolved) { resolved = true; resolve() } }, 60000)
     })
 
-    console.log(`  启动 Chaos Proxy (port ${CHAOS_PORT} → ${DEV_PORT})...`)
+    console.log(`  启动 Chaos Proxy (port ${CHAOS_PORT} → ${APP_PORT})...`)
     chaosProc = startProcess(
       'node',
-      ['scripts/chaos-proxy.mjs', '--target', `http://localhost:${DEV_PORT}`, '--port', String(CHAOS_PORT)],
+      ['scripts/chaos-proxy.mjs', '--target', `http://localhost:${APP_PORT}`, '--port', String(CHAOS_PORT)],
       'chaos',
       '33',
     )
   } else if (mode === 'dist') {
-    console.log('  启动静态文件服务器...')
-    vuepressProc = startProcess(
+    console.log(`  启动静态文件服务器 (port ${APP_PORT})...`)
+    appProc = startProcess(
       'node',
-      ['scripts/static-server.mjs', String(DEV_PORT)],
+      ['scripts/static-server.mjs', String(APP_PORT)],
       'dist',
       '36',
     )
 
     await new Promise((r) => setTimeout(r, 1000))
 
-    console.log(`  启动 Chaos Proxy (port ${CHAOS_PORT} → ${DEV_PORT})...`)
+    console.log(`  启动 Chaos Proxy (port ${CHAOS_PORT} → ${APP_PORT})...`)
     chaosProc = startProcess(
       'node',
-      ['scripts/chaos-proxy.mjs', '--target', `http://localhost:${DEV_PORT}`, '--port', String(CHAOS_PORT)],
+      ['scripts/chaos-proxy.mjs', '--target', `http://localhost:${APP_PORT}`, '--port', String(CHAOS_PORT)],
       'chaos',
       '33',
     )
@@ -93,13 +92,13 @@ async function main() {
 
   console.log('')
   console.log('  ✅ 服务已启动:')
-  console.log(`     站点:  http://localhost:${DEV_PORT}/`)
-  console.log(`     Chaos: http://localhost:${CHAOS_PORT}/`)
+  console.log(`     预览:  http://localhost:${CHAOS_PORT}/  (含 Chaos Panel)`)
+  console.log(`     原始:  http://localhost:${APP_PORT}/  (无干扰)`)
   console.log('')
 
   const cleanup = () => {
     console.log('\n  正在停止服务...')
-    if (vuepressProc) vuepressProc.kill('SIGTERM')
+    if (appProc) appProc.kill('SIGTERM')
     if (chaosProc) chaosProc.kill('SIGTERM')
     setTimeout(() => process.exit(0), 1000)
   }
@@ -108,7 +107,7 @@ async function main() {
   process.on('SIGTERM', cleanup)
 
   process.on('exit', () => {
-    if (vuepressProc) vuepressProc.kill()
+    if (appProc) appProc.kill()
     if (chaosProc) chaosProc.kill()
   })
 }
