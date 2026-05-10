@@ -10,6 +10,7 @@
     "docs:build": "node scripts/check-permalink-conflicts.mjs && vuepress build docs --clean-cache --clean-temp && npx -y pagefind --site docs/.vuepress/dist",
     "docs:dev": "vuepress dev docs",
     "docs:dev-clean": "vuepress dev docs --clean-cache --clean-temp",
+    "docs:chaos": "node scripts/chaos-proxy.mjs --target http://localhost:5860 --port 5861",
     "docs:preview": "http-server docs/.vuepress/dist",
     "vp-update": "pnpm dlx vp-update",
     "up": "bun update -i",
