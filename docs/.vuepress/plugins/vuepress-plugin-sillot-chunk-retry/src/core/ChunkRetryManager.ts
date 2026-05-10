@@ -21,6 +21,11 @@ class StatusIndicator {
   initUI(): void {
     if (!this.enabled || typeof document === 'undefined') return
     if (this.bar) return
+    const existing = document.querySelector('#chunk-retry-status') as HTMLDivElement | null
+    if (existing) {
+      this.bar = existing
+      return
+    }
     this.bar = document.createElement('div')
     this.bar.id = 'chunk-retry-status'
     this.injectStyles()
@@ -116,6 +121,8 @@ export class ChunkRetryManager {
   init(): void {
     if (typeof window === 'undefined') return
 
+    window.__chunkRetryReady = true
+
     this.router.beforeEach((to: RouteLocationNormalized) => {
       this.pendingTarget = to
 
@@ -187,6 +194,8 @@ export class ChunkRetryManager {
     }) as (ev: PromiseRejectionEvent) => void
 
     window.addEventListener('unhandledrejection', this.unhandledRejectionHandler)
+
+    this.initUI()
   }
 
   initUI(): void {
@@ -202,6 +211,7 @@ export class ChunkRetryManager {
       window.removeEventListener('unhandledrejection', this.unhandledRejectionHandler)
       this.unhandledRejectionHandler = null
     }
+    window.__chunkRetryReady = false
     this.status.destroy()
   }
 

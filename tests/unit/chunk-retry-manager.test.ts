@@ -569,9 +569,9 @@ describe('ChunkRetryManager', () => {
       expect(document.querySelector('#chunk-retry-status-styles')).not.toBeNull()
     })
 
-    it('does not create status bar on init alone', () => {
+    it('creates status bar on init (initUI is called automatically)', () => {
       statusManager.init()
-      expect(document.querySelector('#chunk-retry-status')).toBeNull()
+      expect(document.querySelector('#chunk-retry-status')).not.toBeNull()
     })
 
     it('does not create UI when showStatus is false', () => {
