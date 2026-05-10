@@ -148,6 +148,7 @@ export class ChunkRetryManager {
       this.retryCount = 0
       this.pathModules.clear()
       sessionStorage.removeItem(this.options.retryKey)
+      sessionStorage.removeItem('__chunkRetryFallback')
       this.status.hide()
 
       if (this.lastRecoveredPath !== null) {
@@ -346,6 +347,13 @@ export class ChunkRetryManager {
       if (currentPath !== to.path) {
         this.isRecovering = false
         sessionStorage.removeItem(this.options.retryKey)
+        const fallbackKey = '__chunkRetryFallback'
+        const fallbackCount = parseInt(sessionStorage.getItem(fallbackKey) || '0', 10)
+        if (fallbackCount >= 2) {
+          sessionStorage.removeItem(fallbackKey)
+          return
+        }
+        sessionStorage.setItem(fallbackKey, String(fallbackCount + 1))
         location.href = to.fullPath
         return
       }
@@ -356,6 +364,13 @@ export class ChunkRetryManager {
       this.status.showFail()
       this.isRecovering = false
       sessionStorage.removeItem(this.options.retryKey)
+      const fallbackKey = '__chunkRetryFallback'
+      const fallbackCount = parseInt(sessionStorage.getItem(fallbackKey) || '0', 10)
+      if (fallbackCount >= 2) {
+        sessionStorage.removeItem(fallbackKey)
+        return
+      }
+      sessionStorage.setItem(fallbackKey, String(fallbackCount + 1))
       location.href = to.fullPath
     }
   }
@@ -447,6 +462,13 @@ export class ChunkRetryManager {
     this.isRecovering = false
     this.isApplyingModule = false
     sessionStorage.removeItem(this.options.retryKey)
+    const fallbackKey = '__chunkRetryFallback'
+    const fallbackCount = parseInt(sessionStorage.getItem(fallbackKey) || '0', 10)
+    if (fallbackCount >= 2) {
+      sessionStorage.removeItem(fallbackKey)
+      return
+    }
+    sessionStorage.setItem(fallbackKey, String(fallbackCount + 1))
     const target = to.fullPath
     if (location.pathname + location.search !== target) {
       location.href = target

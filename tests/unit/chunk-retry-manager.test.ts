@@ -776,4 +776,56 @@ describe('ChunkRetryManager', () => {
       expect(score).toBeGreaterThan(0)
     })
   })
+
+  describe('fallbackNavigation infinite refresh prevention', () => {
+    it('reloads page on first fallback', () => {
+      manager.init()
+      const originalLocation = window.location
+      vi.spyOn(window, 'location', 'get').mockReturnValue({ ...originalLocation, href: '', pathname: '/current/', search: '', reload: vi.fn() })
+      const to = createMockLocation('/target/')
+      ;(manager as any).fallbackNavigation(to)
+      expect(sessionStorage.getItem('__chunkRetryFallback')).toBe('1')
+      vi.restoreAllMocks()
+    })
+
+    it('reloads page on second fallback', () => {
+      manager.init()
+      sessionStorage.setItem('__chunkRetryFallback', '1')
+      const originalLocation = window.location
+      vi.spyOn(window, 'location', 'get').mockReturnValue({ ...originalLocation, href: '', pathname: '/current/', search: '', reload: vi.fn() })
+      const to = createMockLocation('/target/')
+      ;(manager as any).fallbackNavigation(to)
+      expect(sessionStorage.getItem('__chunkRetryFallback')).toBe('2')
+      vi.restoreAllMocks()
+    })
+
+    it('stops reloading after 2 fallbacks', () => {
+      manager.init()
+      sessionStorage.setItem('__chunkRetryFallback', '2')
+      const reloadFn = vi.fn()
+      const originalLocation = window.location
+      const mockLocation = { ...originalLocation, href: '', pathname: '/test/', search: '', reload: reloadFn }
+      vi.spyOn(window, 'location', 'get').mockReturnValue(mockLocation)
+      const to = createMockLocation('/test/')
+      ;(manager as any).fallbackNavigation(to)
+      expect(reloadFn).not.toHaveBeenCalled()
+      expect(sessionStorage.getItem('__chunkRetryFallback')).toBeNull()
+      vi.restoreAllMocks()
+    })
+
+    it('clears fallback counter in afterEach on successful navigation', () => {
+      manager.init()
+      sessionStorage.setItem('__chunkRetryFallback', '1')
+      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
+      expect(sessionStorage.getItem('__chunkRetryFallback')).toBeNull()
+    })
+
+    it('does not clear fallback counter in afterEach when recovering', () => {
+      manager.init()
+      sessionStorage.setItem('__chunkRetryFallback', '1')
+      ;(manager as any).isRecovering = true
+      router._guards.afterEach[0](createMockLocation('/test/'), createMockLocation('/'))
+      expect(sessionStorage.getItem('__chunkRetryFallback')).toBe('1')
+    })
+  })
 })

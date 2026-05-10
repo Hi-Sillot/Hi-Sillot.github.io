@@ -258,6 +258,10 @@ const server = http.createServer((req, res) => {
     appReady = false
   }
 
+  if (isCacheBust && isChunkUrl(reqUrl)) {
+    appReady = false
+  }
+
   stats.total++
 
   if (isCacheBust) {
@@ -406,6 +410,12 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
   }
 
   if (!config.enabled || isCacheBust) {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers)
+    proxyRes.pipe(res)
+    return
+  }
+
+  if (!appReady && isChunkUrl(reqUrl)) {
     res.writeHead(proxyRes.statusCode, proxyRes.headers)
     proxyRes.pipe(res)
     return
