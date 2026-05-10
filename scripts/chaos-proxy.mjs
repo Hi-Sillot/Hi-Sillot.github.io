@@ -179,13 +179,7 @@ function isFlakyDownPeriod() {
   return elapsed >= (cycleSec - downSec)
 }
 
-function isInWarmup() {
-  return (Date.now() - scenarioActivatedAt) < WARMUP_MS
-}
-
 const versionUpdateFailedUrls = new Set()
-let scenarioActivatedAt = Date.now()
-const WARMUP_MS = 5000
 
 const proxy = httpProxy.createProxyServer({
   target: target.href,
@@ -248,7 +242,7 @@ const server = http.createServer((req, res) => {
   }
 
   const reqUrl = req.url
-  const isCacheBust = new URL(reqUrl, 'http://dummy').searchParams.has('t')
+  const isCacheBust = new URL(reqUrl, 'http://dummy').searchParams.has('t') || new URL(reqUrl, 'http://dummy').searchParams.has('_retry')
   const startTime = Date.now()
 
   stats.total++
@@ -259,7 +253,7 @@ const server = http.createServer((req, res) => {
   }
 
   if (config.scenario === 'flaky') {
-    if (!isInWarmup() && isFlakyDownPeriod() && isChunkUrl(reqUrl)) {
+    if (isFlakyDownPeriod() && isChunkUrl(reqUrl)) {
       stats.failed++
       scheduleBroadcast()
       addLog({ url: reqUrl, method: req.method, status: 503, duration: Date.now() - startTime, interference: '弱网断开', timestamp: Date.now() })
@@ -272,7 +266,7 @@ const server = http.createServer((req, res) => {
   }
 
   if (config.scenario === 'version-update') {
-    if (!isInWarmup() && isChunkUrl(reqUrl)) {
+    if (isChunkUrl(reqUrl)) {
       const pathname = new URL(reqUrl, 'http://dummy').pathname
       if (!versionUpdateFailedUrls.has(pathname)) {
         versionUpdateFailedUrls.add(pathname)
@@ -290,7 +284,7 @@ const server = http.createServer((req, res) => {
 
   if (config.scenario === 'cdn-partial') {
     const pattern = config.scenarioState.cdnPattern || '/assets/.*\\.js$'
-    if (!isInWarmup() && matchPattern(reqUrl, pattern)) {
+    if (matchPattern(reqUrl, pattern)) {
       const failRate = config.scenarioState.cdnFailRate || 0.5
       if (Math.random() < failRate) {
         stats.failed++
@@ -311,7 +305,7 @@ const server = http.createServer((req, res) => {
     const truncateRate = config.scenarioState.overloadTruncateRate || 0.15
     const jitter = config.scenarioState.overloadJitter || 1000
 
-    if (!isInWarmup() && isChunkUrl(reqUrl) && Math.random() < failRate) {
+    if (isChunkUrl(reqUrl) && Math.random() < failRate) {
       stats.failed++
       scheduleBroadcast()
       addLog({ url: reqUrl, method: req.method, status: 503, duration: Date.now() - startTime, interference: '服务器过载(超时)', timestamp: Date.now() })
@@ -378,7 +372,7 @@ const server = http.createServer((req, res) => {
 
 proxy.on('proxyRes', (proxyRes, req, res) => {
   const reqUrl = req.url
-  const isCacheBust = new URL(reqUrl, 'http://dummy').searchParams.has('t')
+  const isCacheBust = new URL(reqUrl, 'http://dummy').searchParams.has('t') || new URL(reqUrl, 'http://dummy').searchParams.has('_retry')
   const contentType = proxyRes.headers['content-type'] || ''
   const startTime = req._chaosStartTime || Date.now()
 
@@ -393,7 +387,7 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
     return
   }
 
-  if (!isInWarmup() && config.scenario === 'overload' && isChunkUrl(reqUrl)) {
+  if (config.scenario === 'overload' && isChunkUrl(reqUrl)) {
     const latency = config.scenarioState.overloadLatency || 2000
     const jitter = config.scenarioState.overloadJitter || 1000
     const truncateRate = config.scenarioState.overloadTruncateRate || 0.15
@@ -526,12 +520,10 @@ function injectChaosPanel(proxyRes, res) {
 const wss = new WebSocketServer({ noServer: true })
 
 function broadcastState() {
-  const warmupRemaining = Math.max(0, WARMUP_MS - (Date.now() - scenarioActivatedAt))
   const msg = JSON.stringify({
     type: 'state',
     config,
     stats: { ...stats, uptimeSec: Math.floor((Date.now() - stats.startTime) / 1000) },
-    warmupRemaining,
     log: requestLog.slice(0, 20),
   })
   wss.clients.forEach(client => {
@@ -564,7 +556,6 @@ wss.on('connection', (ws) => {
         if (config.scenario === 'version-update') {
           versionUpdateFailedUrls.clear()
         }
-        scenarioActivatedAt = Date.now()
         broadcastState()
       }
       if (msg.type === 'reset-stats') {
@@ -827,14 +818,6 @@ function CHAOS_INJECT_SCRIPT() {
       }
       prevFailed=s.failed;
     }
-    var warmup=m.warmupRemaining||0;
-    if(warmup>0&&sk!=='off'&&sk!=='custom'){
-      document.getElementById('cpStatusDot').className='cp-status-dot warn';
-      document.getElementById('cpStatusText').textContent='预热中 '+Math.ceil(warmup/1000)+'s';
-    } else if(warmup<=0&&s&&s.failed===0&&s.total>0&&sk!=='off'){
-      document.getElementById('cpStatusDot').className='cp-status-dot ok';
-      document.getElementById('cpStatusText').textContent='等待干扰';
-    }
     var sk=c.scenario||'off';
     if(!c.enabled)sk='off';
     var sLabel=SL[sk]||'自定义';
@@ -923,15 +906,6 @@ function CHAOS_INJECT_SCRIPT() {
       setTimeout(function(){fab.classList.remove('flash')},550);
       try{localStorage.setItem('__chaos_scenario',sk)}catch(e){}
       if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'config',config:sc}));
-      if(sk!=='off'&&sk!=='custom'){
-        document.getElementById('cpStatusDot').className='cp-status-dot warn';
-        document.getElementById('cpStatusText').textContent='预热中 5s';
-        for(var wi=1;wi<=5;wi++){
-          (function(sec){setTimeout(function(){
-            if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'ping'}));
-          },sec*1000)})(wi);
-        }
-      }
       if(sk==='off'){
         document.getElementById('cpStatusDot').className='cp-status-dot ok';
         document.getElementById('cpStatusText').textContent='网络正常';
