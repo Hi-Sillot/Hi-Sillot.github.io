@@ -122,6 +122,7 @@ export class ChunkRetryManager {
     if (typeof window === 'undefined') return
 
     window.__chunkRetryReady = true
+    try { sessionStorage.removeItem('__chunkRetryCount') } catch {}
 
     this.router.beforeEach((to: RouteLocationNormalized) => {
       this.pendingTarget = to

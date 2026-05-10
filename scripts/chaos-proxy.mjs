@@ -181,6 +181,8 @@ function isFlakyDownPeriod() {
 
 const versionUpdateFailedUrls = new Set()
 
+let appReady = false
+
 const proxy = httpProxy.createProxyServer({
   target: target.href,
   changeOrigin: true,
@@ -244,10 +246,20 @@ const server = http.createServer((req, res) => {
   const reqUrl = req.url
   const isCacheBust = new URL(reqUrl, 'http://dummy').searchParams.has('t') || new URL(reqUrl, 'http://dummy').searchParams.has('_retry')
   const startTime = Date.now()
+  const accept = req.headers['accept'] || ''
+
+  if (accept.includes('text/html')) {
+    appReady = false
+  }
 
   stats.total++
 
   if (isCacheBust) {
+    proxy.web(req, res)
+    return
+  }
+
+  if (!appReady && isChunkUrl(reqUrl)) {
     proxy.web(req, res)
     return
   }
@@ -376,7 +388,7 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
   const contentType = proxyRes.headers['content-type'] || ''
   const startTime = req._chaosStartTime || Date.now()
 
-  if (contentType.includes('text/html') && !isCacheBust) {
+  if (contentType.includes('text/html')) {
     injectChaosPanel(proxyRes, res)
     return
   }
@@ -524,6 +536,7 @@ function broadcastState() {
     type: 'state',
     config,
     stats: { ...stats, uptimeSec: Math.floor((Date.now() - stats.startTime) / 1000) },
+    appReady,
     log: requestLog.slice(0, 20),
   })
   wss.clients.forEach(client => {
@@ -556,6 +569,7 @@ wss.on('connection', (ws) => {
         if (config.scenario === 'version-update') {
           versionUpdateFailedUrls.clear()
         }
+        appReady = false
         broadcastState()
       }
       if (msg.type === 'reset-stats') {
@@ -563,6 +577,10 @@ wss.on('connection', (ws) => {
         broadcastState()
       }
       if (msg.type === 'ping') {
+        broadcastState()
+      }
+      if (msg.type === 'app-ready') {
+        appReady = true
         broadcastState()
       }
     } catch {}
@@ -779,12 +797,36 @@ function CHAOS_INJECT_SCRIPT() {
     };
     ws.onmessage=e=>{
       const m=JSON.parse(e.data);
-      if(m.type==='state')updUI(m.config,m.stats,m.log);
+      if(m.type==='state')updUI(m.config,m.stats,m.log,m.appReady);
     };
   }
 
+  var _appReadySent=false;
+  function _checkAppReady(){
+    if(_appReadySent)return;
+    if(window.__chunkRetryReady){
+      _appReadySent=true;
+      if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'app-ready'}));
+    }
+  }
+  setInterval(_checkAppReady,500);
+
   var prevFailed=0;
-  function updUI(c,s,log){
+  var _prevScenario='off';
+  function updUI(c,s,log,ar){
+    var sk=c.scenario||'off';
+    if(!c.enabled)sk='off';
+    if(sk!==_prevScenario){
+      _prevScenario=sk;
+      _appReadySent=false;
+    }
+    if(ar&&sk!=='off'){
+      document.getElementById('cpStatusDot').className='cp-status-dot ok';
+      document.getElementById('cpStatusText').textContent='应用就绪 · 干扰中';
+    } else if(!ar&&sk!=='off'){
+      document.getElementById('cpStatusDot').className='cp-status-dot warn';
+      document.getElementById('cpStatusText').textContent='应用加载中...';
+    }
     document.getElementById('cpDnsOn').checked=c.dns.enabled;
     panel.querySelectorAll('input[type="range"]').forEach(el=>{
       const p=el.dataset.p;if(!p)return;
@@ -906,6 +948,7 @@ function CHAOS_INJECT_SCRIPT() {
       setTimeout(function(){fab.classList.remove('flash')},550);
       try{localStorage.setItem('__chaos_scenario',sk)}catch(e){}
       if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'config',config:sc}));
+      _appReadySent=false;
       if(sk==='off'){
         document.getElementById('cpStatusDot').className='cp-status-dot ok';
         document.getElementById('cpStatusText').textContent='网络正常';
